@@ -7,8 +7,8 @@
 ## 🌐 Live Demo
 
 - **Dashboard**: https://project1.deok.kr
-- **Prometheus**: https://project1.deok.kr:9090
-- **Grafana**: https://project1.deok.kr:3000
+- **Prometheus**: https://project1.deok.kr/prometheus
+- **Grafana**: https://project1.deok.kr/grafana
 
 ---
 
