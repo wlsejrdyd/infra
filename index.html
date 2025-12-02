@@ -359,7 +359,7 @@
       { name: 'Prometheus', port: 9090, icon: '🔥', color: 'var(--prometheus)', job: 'prometheus' },
       { name: 'Grafana', port: 3000, icon: '📈', color: 'var(--grafana)', job: null, checkUrl: '/grafana/api/health' },
       { name: 'Node Exporter', port: 9100, icon: '📡', color: '#8b5cf6', job: 'node' },
-      { name: 'MariaDB', port: 3306, icon: '🗄️', color: 'var(--accent)', job: null },
+      { name: 'MariaDB', port: 9981, icon: '🗄️', color: 'var(--accent)', job: null },
     ];
 
     // ============================================
@@ -537,26 +537,60 @@
         if (jsonFiles.length > 0) {
           const latestReport = await fetch(`${CONFIG.reportsUrl}/${jsonFiles[0]}`).then(r => r.json());
           
-          // Summary 업데이트
-          if (latestReport.summary) {
-            document.getElementById('ansibleOk').textContent = latestReport.summary.ok || 0;
-            document.getElementById('ansibleChanged').textContent = latestReport.summary.changed || 0;
-            document.getElementById('ansibleFailed').textContent = latestReport.summary.failed || 0;
-            document.getElementById('ansibleSkipped').textContent = latestReport.summary.skipped || 0;
-          }
+          // 서비스 & 포트 상태로 통계 계산
+          let okCount = 0, failedCount = 0;
           
-          // 로그 업데이트
-          const logConsole = document.getElementById('ansibleLog');
           if (latestReport.services) {
-            logConsole.innerHTML = latestReport.services.map(svc => `
-              <div class="log-line">
-                <span class="log-time">[${svc.port}]</span>
-                <span class="log-${svc.active ? 'ok' : 'failed'}">${svc.active ? 'ok' : 'failed'}</span>
-                <span class="log-task">${svc.name}: ${svc.status}</span>
-              </div>
-            `).join('');
+            latestReport.services.forEach(svc => {
+              if (svc.status === 'active') okCount++;
+              else failedCount++;
+            });
           }
           
+          if (latestReport.ports) {
+            latestReport.ports.forEach(port => {
+              if (port.reachable) okCount++;
+              else failedCount++;
+            });
+          }
+          
+          // Summary 업데이트
+          document.getElementById('ansibleOk').textContent = okCount;
+          document.getElementById('ansibleChanged').textContent = 0;
+          document.getElementById('ansibleFailed').textContent = failedCount;
+          document.getElementById('ansibleSkipped').textContent = 0;
+          
+          // 로그 업데이트 (서비스 + 포트)
+          const logConsole = document.getElementById('ansibleLog');
+          let logHtml = '';
+          
+          if (latestReport.services) {
+            logHtml += latestReport.services.map(svc => {
+              const isOk = svc.status === 'active';
+              return `
+                <div class="log-line">
+                  <span class="log-time">[svc:${svc.port}]</span>
+                  <span class="log-${isOk ? 'ok' : 'failed'}">${isOk ? 'ok' : 'failed'}</span>
+                  <span class="log-task">${svc.name}: ${svc.status}</span>
+                </div>
+              `;
+            }).join('');
+          }
+          
+          if (latestReport.ports) {
+            logHtml += latestReport.ports.map(port => {
+              const isOk = port.reachable;
+              return `
+                <div class="log-line">
+                  <span class="log-time">[port:${port.port}]</span>
+                  <span class="log-${isOk ? 'ok' : 'failed'}">${isOk ? 'ok' : 'failed'}</span>
+                  <span class="log-task">${port.name}: ${isOk ? 'reachable' : 'unreachable'}</span>
+                </div>
+              `;
+            }).join('');
+          }
+          
+          logConsole.innerHTML = logHtml;
           document.getElementById('ansibleUpdateTime').textContent = 'Report: ' + jsonFiles[0].replace('report_', '').replace('.json', '');
         } else {
           document.getElementById('ansibleLog').innerHTML = '<div class="loading">No reports found. Run: ansible-playbook site.yml</div>';
