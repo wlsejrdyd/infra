@@ -1,0 +1,59 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+.project
+.classpath
+.settings/
+
+# Compiled
+*.class
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment (절대 커밋 금지!)
+.env
+.env.local
+.env.*.local
+
+# Sensitive configs
+application-prod.yml
+application-secret.yml
+
+# Uploads
+/uploads/
+/data/
+
+# Package
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+
+# Test
+/test-output/
+/target/
+
+# Misc
+rebel.xml
+*.bak
+*~
+
+# Backup
+reports/backup_*
