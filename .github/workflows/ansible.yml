@@ -87,6 +87,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
           script: |
             echo "📋 Latest reports:"
             ls -lt /app/infra/reports/*.json 2>/dev/null | head -3 || echo "No JSON reports"

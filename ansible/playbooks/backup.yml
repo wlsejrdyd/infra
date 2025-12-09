@@ -56,9 +56,9 @@
     # ============================================
     - name: Backup SALM Database
       shell: |
-        source /app/salm/.env 2>/dev/null || true
-        DB_PASS=${DB_PASSWORD:-$(grep DB_PASSWORD /app/salm/.env 2>/dev/null | cut -d= -f2)}
-        mysqldump -u salm -p"${DB_PASS}" salm 2>/dev/null | gzip > {{ backup_base }}/db/daily/salm-db-{{ date_str }}.sql.gz
+        source /app/salm/shared/.env 2>/dev/null || true
+        DB_PASS=${DB_PASSWORD:-$(grep DB_PASSWORD /app/salm/shared/.env 2>/dev/null | cut -d= -f2)}
+        mysqldump -u salm_admin -p"${DB_PASS}" salm 2>/dev/null | gzip > {{ backup_base }}/db/daily/salm-db-{{ date_str }}.sql.gz
       args:
         executable: /bin/bash
       register: salm_db_backup
@@ -66,10 +66,10 @@
 
     - name: Backup Mgmt Database
       shell: |
-        source /app/mgmt/.env 2>/dev/null || true
-        DB_PASS=${DB_PASSWORD:-$(grep DB_PASSWORD /app/mgmt/.env 2>/dev/null | cut -d= -f2)}
+        source /app/mgmt/shared/.env 2>/dev/null || true
+        DB_PASS=${DB_PASSWORD:-$(grep DB_PASSWORD /app/mgmt/shared/.env 2>/dev/null | cut -d= -f2)}
         if [ -n "$DB_PASS" ]; then
-          mysqldump -u mgmt -p"${DB_PASS}" mgmt 2>/dev/null | gzip > {{ backup_base }}/db/daily/mgmt-db-{{ date_str }}.sql.gz
+          mysqldump -u tasks_admin -p"${DB_PASS}" task 2>/dev/null | gzip > {{ backup_base }}/db/daily/mgmt-db-{{ date_str }}.sql.gz
         fi
       args:
         executable: /bin/bash
