@@ -1,7 +1,7 @@
 # .github/workflows/ansible.yml
 # Ansible 플레이북 원격 실행
 
-name: Infra Monitoring Project Ansible (STATE)
+name: Infra Monitoring Project Ansible
 
 on:
   workflow_dispatch:  # 수동 실행만
@@ -53,7 +53,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SERVER_PORT || 22 }}
+          port: ${{ secrets.SERVER_PORT }}
           command_timeout: 10m
           script: |
             echo "🚀 Starting Ansible playbook..."
