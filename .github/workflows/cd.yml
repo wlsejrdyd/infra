@@ -54,7 +54,7 @@ jobs:
           script: |
             echo "🔍 Verifying deployment..."
             
-            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/)
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://infra.deok.kr)
             
             if [ "$HTTP_STATUS" = "200" ]; then
               echo "✅ Dashboard responding (HTTP $HTTP_STATUS)"

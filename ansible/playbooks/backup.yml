@@ -69,7 +69,7 @@
         source /app/mgmt/shared/.env 2>/dev/null || true
         DB_PASS=${DB_PASSWORD:-$(grep DB_PASSWORD /app/mgmt/shared/.env 2>/dev/null | cut -d= -f2)}
         if [ -n "$DB_PASS" ]; then
-          mysqldump -u tasks_admin -p"${DB_PASS}" task 2>/dev/null | gzip > {{ backup_base }}/db/daily/mgmt-db-{{ date_str }}.sql.gz
+          mysqldump -u task_admin -p"${DB_PASS}" tasks 2>/dev/null | gzip > {{ backup_base }}/db/daily/mgmt-db-{{ date_str }}.sql.gz
         fi
       args:
         executable: /bin/bash
