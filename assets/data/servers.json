@@ -1,0 +1,34 @@
+{
+  "servers": [
+    {
+      "id": "rocky-main",
+      "name": "Rocky Linux Main",
+      "project": "Infrastructure",
+      "instance": "localhost:9100",
+      "description": "jindeokyong-Virtual-Machine(Main-Rocky)",
+      "icon": "🖥️"
+    },
+    {
+      "id": "ubuntu-dev",
+      "name": "Ubuntu Test",
+      "project": "Test",
+      "instance": "192.168.100.2:9100",
+      "description": "Test Server",
+      "icon": "🧪"
+    }
+  ],
+  "defaultThresholds": {
+    "cpu": {
+      "warning": 70,
+      "critical": 90
+    },
+    "memory": {
+      "warning": 80,
+      "critical": 95
+    },
+    "disk": {
+      "warning": 80,
+      "critical": 90
+    }
+  }
+}
