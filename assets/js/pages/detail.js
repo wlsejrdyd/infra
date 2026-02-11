@@ -7,6 +7,7 @@ import {
   fetchDiskIO,
   fetchLoadAverage,
   fetchAllDisks,
+  fetchTopProcesses,
   fetchMinioCapacity,
   fetchLonghornCapacity,
   fetchServersData
@@ -38,58 +39,98 @@ export async function renderDetail(params) {
   const main = document.getElementById('app');
   main.innerHTML = `
     <div class="main">
-      <!-- Server Header (주요 지표 통합) -->
-      <div class="card" style="margin-bottom: 1.5rem;">
-        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-          <div style="font-size: 2.5rem;">${server.icon}</div>
-          <div style="flex: 1;">
-            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
-              <h1 style="font-size: 1.5rem; margin: 0;">${server.name}</h1>
-              <span class="badge info">${server.project}</span>
-              <div class="status-indicator" id="serverStatus"></div>
+      <!-- 상단: 서버 상태(7) + Network/Disk I/O(3) -->
+      <div style="display: grid; grid-template-columns: 7fr 3fr; gap: 1rem; margin-bottom: 1.5rem;">
+        <!-- 서버 상태 카드 -->
+        <div class="card">
+          <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+            <div style="font-size: 2.5rem;">${server.icon}</div>
+            <div style="flex: 1;">
+              <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
+                <h1 style="font-size: 1.5rem; margin: 0;">${server.name}</h1>
+                <span class="badge info">${server.project}</span>
+                <div class="status-indicator" id="serverStatus"></div>
+              </div>
+              <div style="font-size: 0.9rem; color: var(--text-muted);">${server.instance}</div>
             </div>
-            <div style="font-size: 0.9rem; color: var(--text-muted);">${server.instance}</div>
+            <button class="btn" onclick="window.location.hash = '/overview'">← 돌아가기</button>
           </div>
-          <button class="btn" onclick="window.location.hash = '/overview'">← 돌아가기</button>
+
+          <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+            <!-- CPU -->
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <span style="font-size: 0.8rem; color: var(--text-muted); min-width: 40px; font-weight: 600;">CPU</span>
+              <div class="progress-bar" style="flex: 1; height: 8px;"><div class="progress-fill" id="cpuProgress" style="background: var(--success);"></div></div>
+              <span id="cpuValue" style="font-size: 0.9rem; font-weight: 600; min-width: 55px; text-align: right;">--%</span>
+            </div>
+            <!-- Memory -->
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <span style="font-size: 0.8rem; color: var(--text-muted); min-width: 40px; font-weight: 600;">MEM</span>
+              <div class="progress-bar" style="flex: 1; height: 8px;"><div class="progress-fill" id="memProgress" style="background: var(--success);"></div></div>
+              <span id="memValue" style="font-size: 0.9rem; font-weight: 600; min-width: 55px; text-align: right;">--%</span>
+              <span id="memDetail" style="font-size: 0.75rem; color: var(--text-muted); min-width: 160px;"></span>
+            </div>
+            <!-- Disk -->
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <span style="font-size: 0.8rem; color: var(--text-muted); min-width: 40px; font-weight: 600;">DISK</span>
+              <div class="progress-bar" style="flex: 1; height: 8px;"><div class="progress-fill" id="diskProgress" style="background: var(--success);"></div></div>
+              <span id="diskValue" style="font-size: 0.9rem; font-weight: 600; min-width: 55px; text-align: right;">--%</span>
+              <span id="diskDetail" style="font-size: 0.75rem; color: var(--text-muted); min-width: 160px;"></span>
+            </div>
+          </div>
+
+          <!-- Uptime & Load Average -->
+          <div style="display: flex; gap: 1.5rem; margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); font-size: 0.85rem;">
+            <div style="display: flex; align-items: center; gap: 0.4rem;">
+              <span style="color: var(--text-muted);">Uptime</span>
+              <span id="uptimeValue" style="font-weight: 600;">--</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.4rem;">
+              <span style="color: var(--text-muted);">Load</span>
+              <span id="load1" style="font-weight: 600;">--</span>
+              <span style="color: var(--text-muted);">/</span>
+              <span id="load5" style="font-weight: 600;">--</span>
+              <span style="color: var(--text-muted);">/</span>
+              <span id="load15" style="font-weight: 600;">--</span>
+              <span style="color: var(--text-muted); font-size: 0.75rem;">(1m/5m/15m)</span>
+            </div>
+          </div>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 0.6rem;">
-          <!-- CPU -->
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <span style="font-size: 0.8rem; color: var(--text-muted); min-width: 40px; font-weight: 600;">CPU</span>
-            <div class="progress-bar" style="flex: 1; height: 8px;"><div class="progress-fill" id="cpuProgress" style="background: var(--color-blue);"></div></div>
-            <span id="cpuValue" style="font-size: 0.9rem; font-weight: 600; min-width: 55px; text-align: right;">--%</span>
+        <!-- Network Traffic + Disk I/O (위/아래 배치) -->
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <div class="card" style="flex: 1;">
+            <div class="card-header">
+              <span class="card-title">NETWORK TRAFFIC</span>
+              <span class="card-icon">📡</span>
+            </div>
+            <div style="padding: 0.75rem 0;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span style="color: var(--text-muted); font-size: 0.85rem;">↓ Inbound</span>
+                <span id="networkIn" style="font-size: 1.1rem; font-weight: 600;">-- B/s</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-muted); font-size: 0.85rem;">↑ Outbound</span>
+                <span id="networkOut" style="font-size: 1.1rem; font-weight: 600;">-- B/s</span>
+              </div>
+            </div>
           </div>
-          <!-- Memory -->
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <span style="font-size: 0.8rem; color: var(--text-muted); min-width: 40px; font-weight: 600;">MEM</span>
-            <div class="progress-bar" style="flex: 1; height: 8px;"><div class="progress-fill" id="memProgress" style="background: var(--color-pink);"></div></div>
-            <span id="memValue" style="font-size: 0.9rem; font-weight: 600; min-width: 55px; text-align: right;">--%</span>
-            <span id="memDetail" style="font-size: 0.75rem; color: var(--text-muted); min-width: 160px;"></span>
-          </div>
-          <!-- Disk -->
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <span style="font-size: 0.8rem; color: var(--text-muted); min-width: 40px; font-weight: 600;">DISK</span>
-            <div class="progress-bar" style="flex: 1; height: 8px;"><div class="progress-fill" id="diskProgress" style="background: var(--color-purple);"></div></div>
-            <span id="diskValue" style="font-size: 0.9rem; font-weight: 600; min-width: 55px; text-align: right;">--%</span>
-            <span id="diskDetail" style="font-size: 0.75rem; color: var(--text-muted); min-width: 160px;"></span>
-          </div>
-        </div>
 
-        <!-- Uptime & Load Average -->
-        <div style="display: flex; gap: 1.5rem; margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); font-size: 0.85rem;">
-          <div style="display: flex; align-items: center; gap: 0.4rem;">
-            <span style="color: var(--text-muted);">Uptime</span>
-            <span id="uptimeValue" style="font-weight: 600;">--</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 0.4rem;">
-            <span style="color: var(--text-muted);">Load</span>
-            <span id="load1" style="font-weight: 600;">--</span>
-            <span style="color: var(--text-muted);">/</span>
-            <span id="load5" style="font-weight: 600;">--</span>
-            <span style="color: var(--text-muted);">/</span>
-            <span id="load15" style="font-weight: 600;">--</span>
-            <span style="color: var(--text-muted); font-size: 0.75rem;">(1m/5m/15m)</span>
+          <div class="card" style="flex: 1;">
+            <div class="card-header">
+              <span class="card-title">DISK I/O</span>
+              <span class="card-icon">💿</span>
+            </div>
+            <div style="padding: 0.75rem 0;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span style="color: var(--text-muted); font-size: 0.85rem;">📖 Read</span>
+                <span id="diskRead" style="font-size: 1.1rem; font-weight: 600;">-- B/s</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-muted); font-size: 0.85rem;">✍️ Write</span>
+                <span id="diskWrite" style="font-size: 1.1rem; font-weight: 600;">-- B/s</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -115,48 +156,24 @@ export async function renderDetail(params) {
         </div>
       </div>
 
-      <!-- Network & Disk I/O & All Disks — 3열 -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 1rem; margin-bottom: 1.5rem;">
-        <div class="card">
+      <!-- Top Processes + All Disks — 2열 -->
+      <div class="grid-2" style="margin-bottom: 1.5rem;">
+        <div class="card" style="display:flex;flex-direction:column;">
           <div class="card-header">
-            <span class="card-title">NETWORK TRAFFIC</span>
-            <span class="card-icon">📡</span>
+            <span class="card-title">TOP PROCESSES (CPU)</span>
+            <span class="card-icon">📊</span>
           </div>
-          <div style="padding: 1rem 0;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 0.75rem;">
-              <span style="color: var(--text-muted);">↓ Inbound</span>
-              <span id="networkIn" style="font-size: 1.25rem; font-weight: 600;">-- MB/s</span>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-              <span style="color: var(--text-muted);">↑ Outbound</span>
-              <span id="networkOut" style="font-size: 1.25rem; font-weight: 600;">-- MB/s</span>
-            </div>
+          <div id="topProcessContainer" style="flex:1;max-height:210px;overflow-y:auto;padding:0.5rem 0;">
+            <div style="color: var(--text-muted); font-size: 0.9rem;">프로세스 정보를 불러오는 중...</div>
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">DISK I/O</span>
-            <span class="card-icon">💿</span>
-          </div>
-          <div style="padding: 1rem 0;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 0.75rem;">
-              <span style="color: var(--text-muted);">📖 Read</span>
-              <span id="diskRead" style="font-size: 1.25rem; font-weight: 600;">-- MB/s</span>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-              <span style="color: var(--text-muted);">✍️ Write</span>
-              <span id="diskWrite" style="font-size: 1.25rem; font-weight: 600;">-- MB/s</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
+        <div class="card" style="display:flex;flex-direction:column;">
           <div class="card-header">
             <span class="card-title">DISK USAGE (ALL FILESYSTEMS)</span>
             <span class="card-icon" style="color: var(--color-purple);">💾</span>
           </div>
-          <div id="allDisksContainer" style="padding: 1rem 0;">
+          <div id="allDisksContainer" style="flex:1;max-height:210px;overflow-y:auto;padding:0.5rem 0;">
             <div style="color: var(--text-muted); font-size: 0.9rem;">디스크 정보를 불러오는 중...</div>
           </div>
         </div>
@@ -204,16 +221,29 @@ async function updateServerData(server) {
     statusEl.className = `status-indicator ${metrics.status}`;
   }
 
+  // 임계값 기반 색상 (overview 카드와 동일)
+  const barColor = (val, type) => {
+    if (!val) return 'var(--success)';
+    const th = { cpu: { warning: 80, critical: 90 }, memory: { warning: 80, critical: 90 }, disk: { warning: 80, critical: 90 } };
+    if (val >= th[type].critical) return 'var(--danger)';
+    if (val >= th[type].warning) return 'var(--warning)';
+    return 'var(--success)';
+  };
+
   // CPU
-  if (metrics.cpu !== null) {
-    document.getElementById('cpuValue').textContent = `${metrics.cpu.toFixed(1)}%`;
-    document.getElementById('cpuProgress').style.width = `${metrics.cpu}%`;
+  if (typeof metrics.cpu === 'number') {
+    const cpuEl = document.getElementById('cpuProgress');
+    const cpuValEl = document.getElementById('cpuValue');
+    if (cpuEl) { cpuEl.style.width = `${metrics.cpu}%`; cpuEl.style.background = barColor(metrics.cpu, 'cpu'); }
+    if (cpuValEl) cpuValEl.textContent = `${metrics.cpu.toFixed(1)}%`;
   }
 
   // Memory
-  if (metrics.memory !== null) {
-    document.getElementById('memValue').textContent = `${metrics.memory.toFixed(1)}%`;
-    document.getElementById('memProgress').style.width = `${metrics.memory}%`;
+  if (typeof metrics.memory === 'number') {
+    const memEl = document.getElementById('memProgress');
+    const memValEl = document.getElementById('memValue');
+    if (memEl) { memEl.style.width = `${metrics.memory}%`; memEl.style.background = barColor(metrics.memory, 'memory'); }
+    if (memValEl) memValEl.textContent = `${metrics.memory.toFixed(1)}%`;
     const memDetailEl = document.getElementById('memDetail');
     if (memDetailEl && metrics.memoryUsed && metrics.memoryTotal) {
       memDetailEl.textContent = `(${formatBytes(metrics.memoryUsed)} / ${formatBytes(metrics.memoryTotal)})`;
@@ -221,9 +251,11 @@ async function updateServerData(server) {
   }
 
   // Disk
-  if (metrics.disk !== null) {
-    document.getElementById('diskValue').textContent = `${metrics.disk.toFixed(1)}%`;
-    document.getElementById('diskProgress').style.width = `${metrics.disk}%`;
+  if (typeof metrics.disk === 'number') {
+    const diskEl = document.getElementById('diskProgress');
+    const diskValEl = document.getElementById('diskValue');
+    if (diskEl) { diskEl.style.width = `${metrics.disk}%`; diskEl.style.background = barColor(metrics.disk, 'disk'); }
+    if (diskValEl) diskValEl.textContent = `${metrics.disk.toFixed(1)}%`;
     const diskDetailEl = document.getElementById('diskDetail');
     if (diskDetailEl && metrics.diskUsed && metrics.diskTotal) {
       diskDetailEl.textContent = `(${formatBytes(metrics.diskUsed)} / ${formatBytes(metrics.diskTotal)})`;
@@ -362,6 +394,29 @@ async function updateServerData(server) {
       }).join('');
   } else if (disksContainer) {
     disksContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem;">디스크 정보 없음</div>';
+  }
+
+  // Top Processes
+  const processes = await fetchTopProcesses(server.instance);
+  const procContainer = document.getElementById('topProcessContainer');
+  if (procContainer && processes.length > 0) {
+    procContainer.innerHTML = `
+      <div style="display:flex;justify-content:space-between;padding:0 0 0.4rem;border-bottom:1px solid var(--border);margin-bottom:0.3rem;">
+        <span style="font-size:0.7rem;color:var(--text-muted);font-weight:600;flex:1;">PROCESS</span>
+        <span style="font-size:0.7rem;color:var(--text-muted);font-weight:600;min-width:65px;text-align:right;">CPU</span>
+        <span style="font-size:0.7rem;color:var(--text-muted);font-weight:600;min-width:75px;text-align:right;">MEM</span>
+      </div>
+    ` + processes.map((p, i) => {
+      const cpuColor = p.cpu >= 50 ? 'var(--danger)' : p.cpu >= 20 ? 'var(--warning)' : 'var(--text-primary)';
+      return `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.3rem 0;${i < processes.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.03);' : ''}">
+          <span style="font-size:0.82rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.name}">${p.name}</span>
+          <span style="font-size:0.82rem;font-weight:600;min-width:65px;text-align:right;color:${cpuColor};">${p.cpu.toFixed(1)}%</span>
+          <span style="font-size:0.82rem;min-width:75px;text-align:right;color:var(--text-muted);">${formatBytes(p.memory)}</span>
+        </div>`;
+    }).join('');
+  } else if (procContainer) {
+    procContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem 0;">process-exporter 미설치 또는 데이터 없음</div>';
   }
 
   // 차트 생성 (첫 실행 시에만)

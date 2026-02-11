@@ -615,3 +615,41 @@ export async function fetchLoadAverage(instance) {
   
   return loadAvg;
 }
+
+/**
+ * Top Process 목록 조회 (process-exporter 필요)
+ * CPU 사용률 기준 상위 N개 + 메모리(resident) 병합
+ */
+export async function fetchTopProcesses(instance, limit = 10) {
+  const processes = [];
+  try {
+    const cpuQuery = `topk(${limit}, sum by (groupname) (rate(namedprocess_namegroup_cpu_seconds_total{instance="${instance}"}[5m])) * 100)`;
+    const memQuery = `sum by (groupname) (namedprocess_namegroup_memory_bytes{instance="${instance}",memtype="resident"})`;
+
+    const [cpuRes, memRes] = await Promise.all([
+      fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent(cpuQuery)}`).then(r => r.json()).catch(() => null),
+      fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent(memQuery)}`).then(r => r.json()).catch(() => null),
+    ]);
+
+    const memMap = {};
+    if (memRes?.status === 'success') {
+      memRes.data.result.forEach(r => {
+        memMap[r.metric.groupname] = parseFloat(r.value[1]);
+      });
+    }
+
+    if (cpuRes?.status === 'success') {
+      cpuRes.data.result.forEach(r => {
+        const name = r.metric.groupname;
+        processes.push({
+          name,
+          cpu: parseFloat(r.value[1]),
+          memory: memMap[name] || 0,
+        });
+      });
+    }
+  } catch (e) {
+    console.error('Failed to fetch top processes:', e);
+  }
+  return processes;
+}
