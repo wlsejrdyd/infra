@@ -15,7 +15,6 @@ let isPaused = false;
 let isDragging = false;
 let dragStartX = 0;
 let dragStartPos = 0;
-let contentDuplicated = false;
 
 const GAP = 6;
 let cardStyle = {};
@@ -327,24 +326,17 @@ function setupDragScroll() {
 }
 
 /**
- * 슬라이드 위치 적용 (wrap-around 처리)
+ * 슬라이드 위치 적용 (0 ~ maxScroll 범위 제한)
  */
 function applySlidePos(newPos) {
   const track = document.getElementById('scrollTrack');
   if (!track) return;
 
-  if (contentDuplicated) {
-    const halfW = track.scrollWidth / 2;
-    if (halfW > 0) {
-      newPos = ((newPos % halfW) + halfW) % halfW;
-    }
-  } else {
-    const container = document.getElementById('scrollContainer');
-    if (container) {
-      const maxScroll = Math.max(0, track.scrollWidth - container.clientWidth);
-      newPos = Math.max(0, Math.min(newPos, maxScroll));
-    }
-  }
+  const container = document.getElementById('scrollContainer');
+  const maxScroll = container
+    ? Math.max(0, track.scrollWidth - container.clientWidth)
+    : slideMaxScroll;
+  newPos = Math.max(0, Math.min(newPos, maxScroll));
 
   slidePos = newPos;
   track.style.transform = `translateX(-${slidePos}px)`;
@@ -464,31 +456,18 @@ function renderServerGrid() {
       scrollLabel.innerHTML = `✅ 정상 / 💤 오프라인 — ${currentRows}행 <span style="font-size:0.6rem;color:var(--text-muted);margin-left:8px;font-weight:400;">(드래그로 좌우 이동)</span>`;
     }
 
-    // 카드 렌더링
+    // 카드 렌더링 (복제 없이 등록된 서버만 표시)
     const cards = scrolling.map(s => renderCompactCard(s)).join('');
+    track.innerHTML = cards;
 
-    // 마지막 열의 빈 자리를 투명 스페이서로 채워 복제 시 섞임 방지
-    const remainder = scrolling.length % currentRows;
-    const spacerCount = remainder > 0 ? currentRows - remainder : 0;
-    const spacerHtml = `<div style="width:${cardStyle.width}px;height:${cardStyle.height}px;flex-shrink:0;visibility:hidden;pointer-events:none;"></div>`;
-    const spacers = spacerHtml.repeat(spacerCount);
-    const paddedCards = cards + spacers;
-
-    track.innerHTML = paddedCards;
-
-    // 슬라이딩 필요 여부: 카드 열 수 기반으로 정확히 계산
+    // 슬라이딩 필요 여부: 콘텐츠가 컨테이너보다 넓으면 슬라이딩
     const colCount = Math.ceil(scrolling.length / currentRows);
     const contentW = colCount * cardStyle.width + (colCount - 1) * dg;
     const containerW = container.clientWidth;
+    const maxScroll = Math.max(0, contentW - containerW);
 
-    if (contentW > containerW) {
-      // 스페이서로 열 경계가 정확히 맞으므로 복제본이 다음 열부터 시작
-      track.innerHTML = paddedCards + paddedCards;
-      contentDuplicated = true;
-      startSliding();
-    } else {
-      // 카드가 화면에 다 들어감 → 복제/슬라이딩 불필요
-      contentDuplicated = false;
+    if (maxScroll > 0) {
+      startSliding(maxScroll);
     }
   });
 }
@@ -542,21 +521,41 @@ function renderCompactCard(server) {
 }
 
 /**
- * 자동 슬라이딩
+ * 자동 슬라이딩 (핑퐁: 끝까지 → 2초 대기 → 처음으로 → 2초 대기 → 반복)
+ * @param {number} maxScroll — 최대 스크롤 거리(px)
  */
-function startSliding() {
+let slideMaxScroll = 0;
+let slideDirection = 1; // 1: 오른쪽으로, -1: 왼쪽으로
+let slidePauseUntil = 0;
+function startSliding(maxScroll) {
   if (slideAnim) cancelAnimationFrame(slideAnim);
 
   const track = document.getElementById('scrollTrack');
   if (!track) return;
 
+  slideMaxScroll = maxScroll;
+  slideDirection = 1;
+  slidePauseUntil = 0;
   const speed = 0.3;
 
   function step() {
     if (!isPaused && !isDragging) {
-      slidePos += speed;
-      const halfW = track.scrollWidth / 2;
-      if (halfW > 0 && slidePos >= halfW) slidePos = 0;
+      const now = performance.now();
+      if (now < slidePauseUntil) {
+        // 대기 중
+      } else {
+        slidePos += speed * slideDirection;
+
+        if (slidePos >= slideMaxScroll) {
+          slidePos = slideMaxScroll;
+          slideDirection = -1;
+          slidePauseUntil = now + 2000;
+        } else if (slidePos <= 0) {
+          slidePos = 0;
+          slideDirection = 1;
+          slidePauseUntil = now + 2000;
+        }
+      }
       track.style.transform = `translateX(-${slidePos}px)`;
     }
     slideAnim = requestAnimationFrame(step);
