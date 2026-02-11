@@ -38,9 +38,9 @@ export async function renderDetail(params) {
   const main = document.getElementById('app');
   main.innerHTML = `
     <div class="main">
-      <!-- Server Header -->
+      <!-- Server Header (주요 지표 통합) -->
       <div class="card" style="margin-bottom: 1.5rem;">
-        <div style="display: flex; align-items: center; gap: 1rem;">
+        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
           <div style="font-size: 2.5rem;">${server.icon}</div>
           <div style="flex: 1;">
             <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
@@ -52,53 +52,45 @@ export async function renderDetail(params) {
           </div>
           <button class="btn" onclick="window.location.hash = '/overview'">← 돌아가기</button>
         </div>
-      </div>
 
-      <!-- Metrics Cards -->
-      <div class="grid-4" style="margin-bottom: 1.5rem;">
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">CPU USAGE</span>
-            <span class="card-icon" style="color: var(--color-blue);">💻</span>
+        <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+          <!-- CPU -->
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span style="font-size: 0.8rem; color: var(--text-muted); min-width: 40px; font-weight: 600;">CPU</span>
+            <div class="progress-bar" style="flex: 1; height: 8px;"><div class="progress-fill" id="cpuProgress" style="background: var(--color-blue);"></div></div>
+            <span id="cpuValue" style="font-size: 0.9rem; font-weight: 600; min-width: 55px; text-align: right;">--%</span>
           </div>
-          <div class="metric-value" id="cpuValue">--%</div>
-          <div class="progress-bar">
-            <div class="progress-fill" id="cpuProgress" style="background: var(--color-blue);"></div>
+          <!-- Memory -->
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span style="font-size: 0.8rem; color: var(--text-muted); min-width: 40px; font-weight: 600;">MEM</span>
+            <div class="progress-bar" style="flex: 1; height: 8px;"><div class="progress-fill" id="memProgress" style="background: var(--color-pink);"></div></div>
+            <span id="memValue" style="font-size: 0.9rem; font-weight: 600; min-width: 55px; text-align: right;">--%</span>
+            <span id="memDetail" style="font-size: 0.75rem; color: var(--text-muted); min-width: 160px;"></span>
           </div>
-          <div class="metric-label" id="cpuLabel">node_cpu_seconds_total</div>
+          <!-- Disk -->
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span style="font-size: 0.8rem; color: var(--text-muted); min-width: 40px; font-weight: 600;">DISK</span>
+            <div class="progress-bar" style="flex: 1; height: 8px;"><div class="progress-fill" id="diskProgress" style="background: var(--color-purple);"></div></div>
+            <span id="diskValue" style="font-size: 0.9rem; font-weight: 600; min-width: 55px; text-align: right;">--%</span>
+            <span id="diskDetail" style="font-size: 0.75rem; color: var(--text-muted); min-width: 160px;"></span>
+          </div>
         </div>
 
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">MEMORY USAGE</span>
-            <span class="card-icon" style="color: var(--color-pink);">🧠</span>
+        <!-- Uptime & Load Average -->
+        <div style="display: flex; gap: 1.5rem; margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); font-size: 0.85rem;">
+          <div style="display: flex; align-items: center; gap: 0.4rem;">
+            <span style="color: var(--text-muted);">Uptime</span>
+            <span id="uptimeValue" style="font-weight: 600;">--</span>
           </div>
-          <div class="metric-value" id="memValue">--%</div>
-          <div class="progress-bar">
-            <div class="progress-fill" id="memProgress" style="background: var(--color-pink);"></div>
+          <div style="display: flex; align-items: center; gap: 0.4rem;">
+            <span style="color: var(--text-muted);">Load</span>
+            <span id="load1" style="font-weight: 600;">--</span>
+            <span style="color: var(--text-muted);">/</span>
+            <span id="load5" style="font-weight: 600;">--</span>
+            <span style="color: var(--text-muted);">/</span>
+            <span id="load15" style="font-weight: 600;">--</span>
+            <span style="color: var(--text-muted); font-size: 0.75rem;">(1m/5m/15m)</span>
           </div>
-          <div class="metric-label" id="memLabel">node_memory_Active_bytes</div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">DISK USAGE</span>
-            <span class="card-icon" style="color: var(--color-purple);">💾</span>
-          </div>
-          <div class="metric-value" id="diskValue">--%</div>
-          <div class="progress-bar">
-            <div class="progress-fill" id="diskProgress" style="background: var(--color-purple);"></div>
-          </div>
-          <div class="metric-label" id="diskLabel">node_filesystem_avail_bytes</div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">UPTIME</span>
-            <span class="card-icon">⏱️</span>
-          </div>
-          <div class="metric-value" id="uptimeValue">--</div>
-          <div class="metric-label" id="uptimeLabel">node_boot_time_seconds</div>
         </div>
       </div>
 
@@ -171,28 +163,6 @@ export async function renderDetail(params) {
         </div>
       </div>
 
-      <!-- Load Average -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">LOAD AVERAGE</span>
-          <span class="card-icon">⚖️</span>
-        </div>
-        <div style="display: flex; justify-content: space-around; padding: 1rem 0;">
-          <div style="text-align: center;">
-            <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">1분</div>
-            <div id="load1" style="font-size: 1.5rem; font-weight: 600;">--</div>
-          </div>
-          <div style="text-align: center;">
-            <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">5분</div>
-            <div id="load5" style="font-size: 1.5rem; font-weight: 600;">--</div>
-          </div>
-          <div style="text-align: center;">
-            <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">15분</div>
-            <div id="load15" style="font-size: 1.5rem; font-weight: 600;">--</div>
-          </div>
-        </div>
-      </div>
-
       <!-- Storage (MinIO / Longhorn) — 메트릭 존재 시에만 표시 -->
       <div id="storageSection" style="display: none; margin-top: 1.5rem;">
         <div class="grid-2">
@@ -245,12 +215,20 @@ async function updateServerData(server) {
   if (metrics.memory !== null) {
     document.getElementById('memValue').textContent = `${metrics.memory.toFixed(1)}%`;
     document.getElementById('memProgress').style.width = `${metrics.memory}%`;
+    const memDetailEl = document.getElementById('memDetail');
+    if (memDetailEl && metrics.memoryUsed && metrics.memoryTotal) {
+      memDetailEl.textContent = `(${formatBytes(metrics.memoryUsed)} / ${formatBytes(metrics.memoryTotal)})`;
+    }
   }
 
   // Disk
   if (metrics.disk !== null) {
     document.getElementById('diskValue').textContent = `${metrics.disk.toFixed(1)}%`;
     document.getElementById('diskProgress').style.width = `${metrics.disk}%`;
+    const diskDetailEl = document.getElementById('diskDetail');
+    if (diskDetailEl && metrics.diskUsed && metrics.diskTotal) {
+      diskDetailEl.textContent = `(${formatBytes(metrics.diskUsed)} / ${formatBytes(metrics.diskTotal)})`;
+    }
   }
 
   // Uptime

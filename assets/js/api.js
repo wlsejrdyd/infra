@@ -56,6 +56,8 @@ export async function fetchServerMetrics(instance) {
 
     if (memTotal && memAvail) {
       metrics.memory = ((memTotal - memAvail) / memTotal * 100);
+      metrics.memoryTotal = memTotal;
+      metrics.memoryUsed = memTotal - memAvail;
     }
 
     // 모든 실제 파일시스템 중 사용률 가장 높은 디스크
@@ -66,16 +68,26 @@ export async function fetchServerMetrics(instance) {
       });
 
       let maxUsage = 0;
+      let maxDiskTotal = 0;
+      let maxDiskUsed = 0;
       diskSizeData.data.result.forEach(r => {
         const total = parseFloat(r.value[1]);
         const avail = availMap[r.metric.mountpoint];
         if (total > 0 && avail !== undefined) {
           const usage = ((total - avail) / total) * 100;
-          if (usage > maxUsage) maxUsage = usage;
+          if (usage > maxUsage) {
+            maxUsage = usage;
+            maxDiskTotal = total;
+            maxDiskUsed = total - avail;
+          }
         }
       });
 
-      if (maxUsage > 0) metrics.disk = maxUsage;
+      if (maxUsage > 0) {
+        metrics.disk = maxUsage;
+        metrics.diskTotal = maxDiskTotal;
+        metrics.diskUsed = maxDiskUsed;
+      }
     }
 
     if (bootTime) {
