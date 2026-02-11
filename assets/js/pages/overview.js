@@ -21,6 +21,7 @@ const GAP = 6;
 let cardStyle = {};
 let notificationPermission = false;
 let alertEnabled = localStorage.getItem('alertEnabled') !== 'false'; // 기본 ON
+let audioCtx = null; // 재사용 AudioContext (브라우저 정책 대응)
 
 // 브라우저 알림 권한 요청
 if ('Notification' in window) {
@@ -31,27 +32,37 @@ if ('Notification' in window) {
   }
 }
 
+// 첫 사용자 클릭 시 AudioContext 활성화 (Chrome autoplay 정책 대응)
+document.addEventListener('click', () => {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  } else if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}, { once: false });
+
 /**
  * 경고음 재생 (Web Audio API — 외부 파일 불필요)
  */
 function playAlertSound() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
     // 비프 2회
     [0, 0.25].forEach(delay => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(audioCtx.destination);
       osc.frequency.value = 880;
       osc.type = 'sine';
-      gain.gain.setValueAtTime(0.3, ctx.currentTime + delay);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delay + 0.15);
-      osc.start(ctx.currentTime + delay);
-      osc.stop(ctx.currentTime + delay + 0.15);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + delay + 0.15);
+      osc.start(audioCtx.currentTime + delay);
+      osc.stop(audioCtx.currentTime + delay + 0.15);
     });
   } catch (e) {
-    // AudioContext 미지원 시 무시
+    console.warn('[알림소리] 재생 실패:', e.message);
   }
 }
 
