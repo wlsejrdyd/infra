@@ -361,6 +361,11 @@
     gap: 0.5rem;
   }
   .header-stats {
+    border: none;
+    padding: 0;
+    gap: 0.3rem;
+  }
+  .stat-label {
     display: none;
   }
 }

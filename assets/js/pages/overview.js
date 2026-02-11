@@ -19,6 +19,89 @@ let contentDuplicated = false;
 
 const GAP = 6;
 let cardStyle = {};
+let notificationPermission = false;
+let alertEnabled = localStorage.getItem('alertEnabled') !== 'false'; // 기본 ON
+
+// 브라우저 알림 권한 요청
+if ('Notification' in window) {
+  if (Notification.permission === 'granted') {
+    notificationPermission = true;
+  } else if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then(p => { notificationPermission = p === 'granted'; });
+  }
+}
+
+/**
+ * 경고음 재생 (Web Audio API — 외부 파일 불필요)
+ */
+function playAlertSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // 비프 2회
+    [0, 0.25].forEach(delay => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delay + 0.15);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + 0.15);
+    });
+  } catch (e) {
+    // AudioContext 미지원 시 무시
+  }
+}
+
+/**
+ * 브라우저 알림 표시
+ */
+function showBrowserNotification(serverName, status) {
+  const emoji = status === 'critical' ? '🔴' : status === 'warning' ? '⚠️' : '✅';
+  const label = status === 'critical' ? 'Critical' : status === 'warning' ? 'Warning' : 'Recovered';
+  const body = `${serverName} — 상태가 ${label}(으)로 변경되었습니다.`;
+
+  // 브라우저 Notification
+  if (notificationPermission) {
+    try {
+      new Notification(`${emoji} Infrastructure Alert`, { body, icon: '/assets/favicon.ico', tag: serverName });
+    } catch (e) { /* 무시 */ }
+  }
+
+  // 페이지 내 토스트 알림
+  showToast(emoji, serverName, label);
+}
+
+/**
+ * 페이지 내 토스트 알림 (브라우저 권한 없어도 동작)
+ */
+function showToast(emoji, serverName, label) {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.style.cssText = 'position:fixed;top:60px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+    document.body.appendChild(container);
+  }
+
+  const color = label === 'Critical' ? 'var(--danger)' : label === 'Warning' ? 'var(--warning)' : 'var(--success)';
+  const toast = document.createElement('div');
+  toast.style.cssText = `pointer-events:auto;background:var(--bg-card);border:1px solid ${color};border-left:4px solid ${color};border-radius:8px;padding:12px 16px;min-width:260px;box-shadow:0 8px 24px rgba(0,0,0,0.4);animation:fadeIn 0.3s ease-out;`;
+  toast.innerHTML = `
+    <div style="font-size:0.85rem;font-weight:700;margin-bottom:4px;">${emoji} ${label}</div>
+    <div style="font-size:0.8rem;color:var(--text-muted);">${serverName}</div>
+  `;
+  container.appendChild(toast);
+
+  // 5초 후 자동 제거
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 5000);
+}
 
 function clamp(min, val, max) { return Math.min(max, Math.max(min, val)); }
 
@@ -94,6 +177,7 @@ export async function renderOverview() {
             <button class="view-btn ${currentRows === 5 ? 'active' : ''}" data-rows="5">5행</button>
           </div>
           <button class="project-filter-btn" onclick="location.reload()">🔄</button>
+          <button class="project-filter-btn ${alertEnabled ? 'active' : ''}" id="alertToggleBtn" title="알림 ON/OFF">${alertEnabled ? '🔔 알림' : '🔕 알림'}</button>
           <button class="project-filter-btn active" onclick="window.location.hash='/admin'">⚙️ 관리</button>
         </div>
       </div>
@@ -132,6 +216,15 @@ export async function renderOverview() {
       currentRows = parseInt(btn.dataset.rows);
       renderServerGrid();
     });
+  });
+
+  // 알림 토글
+  document.getElementById('alertToggleBtn')?.addEventListener('click', () => {
+    alertEnabled = !alertEnabled;
+    localStorage.setItem('alertEnabled', alertEnabled);
+    const btn = document.getElementById('alertToggleBtn');
+    btn.textContent = alertEnabled ? '🔔 알림' : '🔕 알림';
+    btn.classList.toggle('active', alertEnabled);
   });
 
   // 헤더 상태 필터 토글
@@ -262,8 +355,12 @@ async function updateServerGrid() {
       console.log(`[상태변화] ${server.name}: ${prev || '(초기)'} → ${curr}`);
     }
     if (isNewAlert || isRecovery) {
-      console.log(`[알림발송] ${server.name}: ${curr}`);
-      sendAlertToBackend(server.id, server.name, curr);
+      console.log(`[알림발송] ${server.name}: ${curr} (알림 ${alertEnabled ? 'ON' : 'OFF'})`);
+      if (alertEnabled) {
+        playAlertSound();
+        showBrowserNotification(server.name, curr);
+        sendAlertToBackend(server.id, server.name, curr);
+      }
     }
     previousStatusMap[server.id] = curr;
   }
