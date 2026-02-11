@@ -416,7 +416,6 @@ function renderServerGrid() {
   if (!track || !container) return;
 
   stopSliding();
-  contentDuplicated = false;
   track.innerHTML = '';
   track.style.height = '0';
   track.style.transform = 'translateX(0)';
