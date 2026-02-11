@@ -69,8 +69,8 @@ function playAlertSound() {
  * 브라우저 알림 표시
  */
 function showBrowserNotification(serverName, status) {
-  const emoji = status === 'critical' ? '🔴' : status === 'warning' ? '⚠️' : '✅';
-  const label = status === 'critical' ? 'Critical' : status === 'warning' ? 'Warning' : 'Recovered';
+  const emoji = status === 'critical' ? '🔴' : status === 'warning' ? '⚠️' : status === 'offline' ? '⚫' : '✅';
+  const label = status === 'critical' ? 'Critical' : status === 'warning' ? 'Warning' : status === 'offline' ? 'Offline' : 'Recovered';
   const body = `${serverName} — 상태가 ${label}(으)로 변경되었습니다.`;
 
   // 브라우저 Notification
@@ -194,6 +194,29 @@ export async function renderOverview() {
           <button class="project-filter-btn" onclick="location.reload()">🔄</button>
           <button class="project-filter-btn ${alertEnabled ? 'active' : ''}" id="alertToggleBtn" title="Slack 알림 ON/OFF">${alertEnabled ? '🔔 Slack' : '🔕 Slack'}</button>
           <button class="project-filter-btn active" onclick="window.location.hash='/admin'">⚙️ 관리</button>
+        </div>
+      </div>
+
+      <div class="overview-header-stats" style="display:flex;gap:0.5rem;padding:0 1rem 0.5rem;">
+        <div class="header-stat" data-status="healthy" style="cursor:pointer;display:flex;align-items:center;gap:0.35rem;padding:0.3rem 0.75rem;border-radius:8px;border:1px solid var(--border);transition:border-color 0.2s,background 0.2s;">
+          <div class="si healthy" style="width:8px;height:8px;"></div>
+          <span style="font-size:0.8rem;color:var(--text-muted);">Healthy</span>
+          <span id="headerOk" style="font-size:0.9rem;font-weight:700;">0</span>
+        </div>
+        <div class="header-stat" data-status="warning" style="cursor:pointer;display:flex;align-items:center;gap:0.35rem;padding:0.3rem 0.75rem;border-radius:8px;border:1px solid var(--border);transition:border-color 0.2s,background 0.2s;">
+          <div class="si warning" style="width:8px;height:8px;"></div>
+          <span style="font-size:0.8rem;color:var(--text-muted);">Warning</span>
+          <span id="headerWarn" style="font-size:0.9rem;font-weight:700;">0</span>
+        </div>
+        <div class="header-stat" data-status="critical" style="cursor:pointer;display:flex;align-items:center;gap:0.35rem;padding:0.3rem 0.75rem;border-radius:8px;border:1px solid var(--border);transition:border-color 0.2s,background 0.2s;">
+          <div class="si critical" style="width:8px;height:8px;"></div>
+          <span style="font-size:0.8rem;color:var(--text-muted);">Critical</span>
+          <span id="headerCrit" style="font-size:0.9rem;font-weight:700;">0</span>
+        </div>
+        <div class="header-stat" data-status="offline" style="cursor:pointer;display:flex;align-items:center;gap:0.35rem;padding:0.3rem 0.75rem;border-radius:8px;border:1px solid var(--border);transition:border-color 0.2s,background 0.2s;">
+          <div class="si offline" style="width:8px;height:8px;"></div>
+          <span style="font-size:0.8rem;color:var(--text-muted);">Offline</span>
+          <span id="headerOff" style="font-size:0.9rem;font-weight:700;">0</span>
         </div>
       </div>
 
@@ -358,13 +381,13 @@ async function updateServerGrid() {
   }));
 
   // 상태 변화 감지 → Slack 알림
-  // - warning/critical: 첫 로드 시에도 알림 시도 (백엔드가 중복 차단)
-  // - healthy 복구: 이전에 warning/critical이었던 경우만
+  // - warning/critical/offline: 첫 로드 시에도 알림 시도 (백엔드가 중복 차단)
+  // - healthy 복구: 이전에 warning/critical/offline이었던 경우만
   for (const server of serversData.servers) {
     const prev = previousStatusMap[server.id];
     const curr = server._status;
-    const isAlert = curr === 'warning' || curr === 'critical';
-    const isRecovery = curr === 'healthy' && prev && (prev === 'warning' || prev === 'critical');
+    const isAlert = curr === 'warning' || curr === 'critical' || curr === 'offline';
+    const isRecovery = curr === 'healthy' && prev && (prev === 'warning' || prev === 'critical' || prev === 'offline');
     const isNewAlert = isAlert && (!prev || prev !== curr);
 
     if (prev !== curr) {
@@ -408,8 +431,13 @@ function renderServerGrid() {
   const statusOrder = { critical: 0, warning: 1, healthy: 2, offline: 3 };
   filteredServers.sort((a, b) => (statusOrder[a._status] ?? 4) - (statusOrder[b._status] ?? 4));
 
-  const pinned = filteredServers.filter(s => s._status === 'critical' || s._status === 'warning');
-  const scrolling = filteredServers.filter(s => s._status === 'healthy' || s._status === 'offline');
+  // 상태 필터가 활성화된 경우: pinned/scrolling 분리 없이 모두 scrolling에 표시
+  const pinned = currentStatusFilter === 'all'
+    ? filteredServers.filter(s => s._status === 'critical' || s._status === 'warning')
+    : [];
+  const scrolling = currentStatusFilter === 'all'
+    ? filteredServers.filter(s => s._status === 'healthy' || s._status === 'offline')
+    : filteredServers;
 
   const track = document.getElementById('scrollTrack');
   const container = document.getElementById('scrollContainer');
@@ -448,11 +476,13 @@ function renderServerGrid() {
     // 레이블
     const scrollLabel = document.getElementById('scrollLabel');
     if (scrolling.length === 0) {
-      if (scrollLabel) scrollLabel.textContent = '모든 서버가 주의 상태이거나 필터에 해당하는 서버가 없습니다.';
+      if (scrollLabel) scrollLabel.textContent = '필터에 해당하는 서버가 없습니다.';
       return;
     }
     if (scrollLabel) {
-      scrollLabel.innerHTML = `✅ 정상 / 💤 오프라인 — ${currentRows}행 <span style="font-size:0.6rem;color:var(--text-muted);margin-left:8px;font-weight:400;">(드래그로 좌우 이동)</span>`;
+      const statusLabels = { all: '✅ 정상 / 💤 오프라인', healthy: '✅ Healthy', warning: '⚠️ Warning', critical: '🔴 Critical', offline: '💤 Offline' };
+      const label = statusLabels[currentStatusFilter] || statusLabels.all;
+      scrollLabel.innerHTML = `${label} — ${currentRows}행 <span style="font-size:0.6rem;color:var(--text-muted);margin-left:8px;font-weight:400;">(드래그로 좌우 이동)</span>`;
     }
 
     // 카드 렌더링 (복제 없이 등록된 서버만 표시)

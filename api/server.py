@@ -183,14 +183,16 @@ def handle_alert():
     with _alert_lock:
         state = _load_alert_state()
 
-        if status in ('warning', 'critical'):
+        if status in ('warning', 'critical', 'offline'):
             # 이미 알림 발송된 서버면 중복 발송 안 함
             if server_id in state:
                 return jsonify({'skipped': True, 'message': 'Alert already sent'}), 200
 
-            emoji = '⚠️' if status == 'warning' else '🔴'
-            label = 'Warning' if status == 'warning' else 'Critical'
-            text = f"{emoji} *[{label}] {server_name}* (`{server_id}`)\n상태가 {label}로 변경되었습니다."
+            emoji_map = {'warning': '⚠️', 'critical': '🔴', 'offline': '⚫'}
+            label_map = {'warning': 'Warning', 'critical': 'Critical', 'offline': 'Offline'}
+            emoji = emoji_map[status]
+            label = label_map[status]
+            text = f"{emoji} *[{label}] {server_name}* (`{server_id}`)\n상태가 {label}(으)로 변경되었습니다."
 
             ts = _slack_post_message(SLACK_CHANNEL, text)
             if ts:
@@ -204,7 +206,11 @@ def handle_alert():
             # 이전 알림이 있으면 스레드 댓글로 복구 알림
             if server_id in state:
                 thread_ts = state[server_id]['ts']
-                text = f"✅ *[Recovered] {server_name}* (`{server_id}`)\n정상 범위로 복구되었습니다."
+                prev_status = state[server_id].get('status', '')
+                if prev_status == 'offline':
+                    text = f"✅ *[Reconnected] {server_name}* (`{server_id}`)\n서버가 다시 연결되었습니다."
+                else:
+                    text = f"✅ *[Recovered] {server_name}* (`{server_id}`)\n정상 범위로 복구되었습니다."
                 _slack_reply(SLACK_CHANNEL, thread_ts, text)
                 del state[server_id]
                 _save_alert_state(state)

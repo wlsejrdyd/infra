@@ -115,8 +115,8 @@ export async function renderDetail(params) {
         </div>
       </div>
 
-      <!-- Network & Disk I/O -->
-      <div class="grid-2" style="margin-bottom: 1.5rem;">
+      <!-- Network & Disk I/O & All Disks — 3열 -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 1rem; margin-bottom: 1.5rem;">
         <div class="card">
           <div class="card-header">
             <span class="card-title">NETWORK TRAFFIC</span>
@@ -150,16 +150,15 @@ export async function renderDetail(params) {
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- All Disks -->
-      <div class="card" style="margin-bottom: 1.5rem;">
-        <div class="card-header">
-          <span class="card-title">DISK USAGE (ALL FILESYSTEMS)</span>
-          <span class="card-icon" style="color: var(--color-purple);">💾</span>
-        </div>
-        <div id="allDisksContainer" style="padding: 1rem 0;">
-          <div style="color: var(--text-muted); font-size: 0.9rem;">디스크 정보를 불러오는 중...</div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">DISK USAGE (ALL FILESYSTEMS)</span>
+            <span class="card-icon" style="color: var(--color-purple);">💾</span>
+          </div>
+          <div id="allDisksContainer" style="padding: 1rem 0;">
+            <div style="color: var(--text-muted); font-size: 0.9rem;">디스크 정보를 불러오는 중...</div>
+          </div>
         </div>
       </div>
 
