@@ -8,6 +8,7 @@ import {
   fetchLoadAverage,
   fetchAllDisks,
   fetchTopProcesses,
+  fetchSystemInfo,
   fetchMinioCapacity,
   fetchLonghornCapacity,
   fetchServersData
@@ -62,6 +63,7 @@ export async function renderDetail(params) {
               <span style="font-size: 0.8rem; color: var(--text-muted); min-width: 40px; font-weight: 600;">CPU</span>
               <div class="progress-bar" style="flex: 1; height: 8px;"><div class="progress-fill" id="cpuProgress" style="background: var(--success);"></div></div>
               <span id="cpuValue" style="font-size: 0.9rem; font-weight: 600; min-width: 55px; text-align: right;">--%</span>
+              <span style="min-width: 160px;"></span>
             </div>
             <!-- Memory -->
             <div style="display: flex; align-items: center; gap: 0.75rem;">
@@ -97,39 +99,29 @@ export async function renderDetail(params) {
           </div>
         </div>
 
-        <!-- Network Traffic + Disk I/O (위/아래 배치) -->
-        <div style="display: flex; flex-direction: column; gap: 1rem;">
-          <div class="card" style="flex: 1;">
-            <div class="card-header">
-              <span class="card-title">NETWORK TRAFFIC</span>
-              <span class="card-icon">📡</span>
+        <!-- Network Traffic + Disk I/O (위/아래 배치, 컴팩트) -->
+        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+          <div class="card" style="padding: 0.6rem 1rem;">
+            <div style="font-size: 0.7rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.4rem;">📡 NETWORK TRAFFIC</div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+              <span style="color: var(--text-muted); font-size: 0.8rem;">↓ In</span>
+              <span id="networkIn" style="font-size: 0.95rem; font-weight: 600;">-- B/s</span>
             </div>
-            <div style="padding: 0.75rem 0;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                <span style="color: var(--text-muted); font-size: 0.85rem;">↓ Inbound</span>
-                <span id="networkIn" style="font-size: 1.1rem; font-weight: 600;">-- B/s</span>
-              </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--text-muted); font-size: 0.85rem;">↑ Outbound</span>
-                <span id="networkOut" style="font-size: 1.1rem; font-weight: 600;">-- B/s</span>
-              </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-muted); font-size: 0.8rem;">↑ Out</span>
+              <span id="networkOut" style="font-size: 0.95rem; font-weight: 600;">-- B/s</span>
             </div>
           </div>
 
-          <div class="card" style="flex: 1;">
-            <div class="card-header">
-              <span class="card-title">DISK I/O</span>
-              <span class="card-icon">💿</span>
+          <div class="card" style="padding: 0.6rem 1rem;">
+            <div style="font-size: 0.7rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.4rem;">💿 DISK I/O</div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+              <span style="color: var(--text-muted); font-size: 0.8rem;">📖 Read</span>
+              <span id="diskRead" style="font-size: 0.95rem; font-weight: 600;">-- B/s</span>
             </div>
-            <div style="padding: 0.75rem 0;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                <span style="color: var(--text-muted); font-size: 0.85rem;">📖 Read</span>
-                <span id="diskRead" style="font-size: 1.1rem; font-weight: 600;">-- B/s</span>
-              </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--text-muted); font-size: 0.85rem;">✍️ Write</span>
-                <span id="diskWrite" style="font-size: 1.1rem; font-weight: 600;">-- B/s</span>
-              </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-muted); font-size: 0.8rem;">✍️ Write</span>
+              <span id="diskWrite" style="font-size: 0.95rem; font-weight: 600;">-- B/s</span>
             </div>
           </div>
         </div>
@@ -156,15 +148,15 @@ export async function renderDetail(params) {
         </div>
       </div>
 
-      <!-- Top Processes + All Disks — 2열 -->
+      <!-- Top Processes / System Info + All Disks — 2열 -->
       <div class="grid-2" style="margin-bottom: 1.5rem;">
         <div class="card" style="display:flex;flex-direction:column;">
           <div class="card-header">
-            <span class="card-title">TOP PROCESSES (CPU)</span>
-            <span class="card-icon">📊</span>
+            <span class="card-title" id="infoCardTitle">TOP PROCESSES (CPU)</span>
+            <span class="card-icon" id="infoCardIcon">📊</span>
           </div>
           <div id="topProcessContainer" style="flex:1;max-height:210px;overflow-y:auto;padding:0.5rem 0;">
-            <div style="color: var(--text-muted); font-size: 0.9rem;">프로세스 정보를 불러오는 중...</div>
+            <div style="color: var(--text-muted); font-size: 0.9rem;">로딩 중...</div>
           </div>
         </div>
 
@@ -396,10 +388,16 @@ async function updateServerData(server) {
     disksContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem;">디스크 정보 없음</div>';
   }
 
-  // Top Processes
+  // Top Processes 또는 System Info (fallback)
   const processes = await fetchTopProcesses(server.instance);
   const procContainer = document.getElementById('topProcessContainer');
+  const titleEl = document.getElementById('infoCardTitle');
+  const iconEl = document.getElementById('infoCardIcon');
+
   if (procContainer && processes.length > 0) {
+    // process-exporter 데이터 있음 → 프로세스 목록 표시
+    if (titleEl) titleEl.textContent = 'TOP PROCESSES (CPU)';
+    if (iconEl) iconEl.textContent = '📊';
     procContainer.innerHTML = `
       <div style="display:flex;justify-content:space-between;padding:0 0 0.4rem;border-bottom:1px solid var(--border);margin-bottom:0.3rem;">
         <span style="font-size:0.7rem;color:var(--text-muted);font-weight:600;flex:1;">PROCESS</span>
@@ -416,7 +414,24 @@ async function updateServerData(server) {
         </div>`;
     }).join('');
   } else if (procContainer) {
-    procContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem 0;">process-exporter 미설치 또는 데이터 없음</div>';
+    // fallback: 시스템 정보 표시
+    if (titleEl) titleEl.textContent = 'SYSTEM INFO';
+    if (iconEl) iconEl.textContent = '🖥️';
+    const sysInfo = await fetchSystemInfo(server.instance);
+    const row = (label, value) => `
+      <div style="display:flex;justify-content:space-between;padding:0.35rem 0;border-bottom:1px solid rgba(255,255,255,0.03);">
+        <span style="font-size:0.82rem;color:var(--text-muted);">${label}</span>
+        <span style="font-size:0.82rem;font-weight:600;">${value ?? '--'}</span>
+      </div>`;
+    procContainer.innerHTML =
+      row('Hostname', sysInfo.hostname) +
+      row('OS / Arch', `${sysInfo.os ?? '--'} ${sysInfo.machine ?? ''}`) +
+      row('Kernel', sysInfo.kernel) +
+      row('Running Procs', sysInfo.procsRunning != null ? Math.round(sysInfo.procsRunning) : '--') +
+      row('Blocked Procs', sysInfo.procsBlocked != null ? Math.round(sysInfo.procsBlocked) : '--') +
+      row('Open FDs', sysInfo.fileDescriptors != null ? Math.round(sysInfo.fileDescriptors).toLocaleString() : '--') +
+      row('Entropy', sysInfo.entropy != null ? Math.round(sysInfo.entropy).toLocaleString() : '--') +
+      row('Context Switches', sysInfo.contextSwitches != null ? `${(sysInfo.contextSwitches / 1000).toFixed(1)}K/s` : '--');
   }
 
   // 차트 생성 (첫 실행 시에만)

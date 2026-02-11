@@ -1,6 +1,6 @@
 // assets/js/app.js
 import { router } from '/assets/js/router.js';
-import { renderOverview, cleanupOverview } from '/assets/js/pages/overview.js';
+import { renderOverview, cleanupOverview, setOverviewStatusFilter } from '/assets/js/pages/overview.js';
 import { renderDetail, cleanupDetail } from '/assets/js/pages/detail.js';
 import { renderAdmin, cleanupAdmin } from '/assets/js/pages/admin.js';
 
@@ -61,6 +61,23 @@ function renderHeader() {
       <div class="current-time" id="currentTime"></div>
     </div>
   `;
+
+  // 헤더 상태 클릭 → overview 이동 + 필터 적용
+  header.querySelectorAll('.header-stat').forEach(stat => {
+    stat.style.cursor = 'pointer';
+    stat.addEventListener('click', () => {
+      const status = stat.dataset.status;
+      const onOverview = (window.location.hash || '#/overview').includes('/overview');
+      if (onOverview) {
+        // overview에서: 필터 토글
+        setOverviewStatusFilter(status);
+      } else {
+        // 다른 페이지에서: overview로 이동 + 필터 예약
+        window._pendingStatusFilter = status;
+        window.location.hash = '/overview';
+      }
+    });
+  });
 }
 
 /**

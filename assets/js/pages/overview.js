@@ -197,29 +197,6 @@ export async function renderOverview() {
         </div>
       </div>
 
-      <div class="overview-header-stats" style="display:flex;gap:0.5rem;padding:0 1rem 0.5rem;">
-        <div class="header-stat" data-status="healthy" style="cursor:pointer;display:flex;align-items:center;gap:0.35rem;padding:0.3rem 0.75rem;border-radius:8px;border:1px solid var(--border);transition:border-color 0.2s,background 0.2s;">
-          <div class="si healthy" style="width:8px;height:8px;"></div>
-          <span style="font-size:0.8rem;color:var(--text-muted);">Healthy</span>
-          <span id="headerOk" style="font-size:0.9rem;font-weight:700;">0</span>
-        </div>
-        <div class="header-stat" data-status="warning" style="cursor:pointer;display:flex;align-items:center;gap:0.35rem;padding:0.3rem 0.75rem;border-radius:8px;border:1px solid var(--border);transition:border-color 0.2s,background 0.2s;">
-          <div class="si warning" style="width:8px;height:8px;"></div>
-          <span style="font-size:0.8rem;color:var(--text-muted);">Warning</span>
-          <span id="headerWarn" style="font-size:0.9rem;font-weight:700;">0</span>
-        </div>
-        <div class="header-stat" data-status="critical" style="cursor:pointer;display:flex;align-items:center;gap:0.35rem;padding:0.3rem 0.75rem;border-radius:8px;border:1px solid var(--border);transition:border-color 0.2s,background 0.2s;">
-          <div class="si critical" style="width:8px;height:8px;"></div>
-          <span style="font-size:0.8rem;color:var(--text-muted);">Critical</span>
-          <span id="headerCrit" style="font-size:0.9rem;font-weight:700;">0</span>
-        </div>
-        <div class="header-stat" data-status="offline" style="cursor:pointer;display:flex;align-items:center;gap:0.35rem;padding:0.3rem 0.75rem;border-radius:8px;border:1px solid var(--border);transition:border-color 0.2s,background 0.2s;">
-          <div class="si offline" style="width:8px;height:8px;"></div>
-          <span style="font-size:0.8rem;color:var(--text-muted);">Offline</span>
-          <span id="headerOff" style="font-size:0.9rem;font-weight:700;">0</span>
-        </div>
-      </div>
-
       <div class="overview-content">
         <div class="pinned-section" id="pinnedSection">
           <div class="section-label">🔴 주의 필요 — 고정 표시</div>
@@ -273,17 +250,14 @@ export async function renderOverview() {
     }
   });
 
-  // 헤더 상태 필터 토글
-  document.querySelectorAll('.header-stat').forEach(stat => {
-    stat.addEventListener('click', () => {
-      const status = stat.dataset.status;
-      currentStatusFilter = currentStatusFilter === status ? 'all' : status;
-      document.querySelectorAll('.header-stat').forEach(s => {
-        s.classList.toggle('active', s.dataset.status === currentStatusFilter);
-      });
-      renderServerGrid();
+  // pendingStatusFilter 적용 (다른 페이지에서 헤더 상태 클릭 → overview 진입 시)
+  if (window._pendingStatusFilter) {
+    currentStatusFilter = window._pendingStatusFilter;
+    delete window._pendingStatusFilter;
+    document.querySelectorAll('.header-stat').forEach(s => {
+      s.classList.toggle('active', s.dataset.status === currentStatusFilter);
     });
-  });
+  }
 
   // 드래그 스크롤 설정
   setupDragScroll();
@@ -631,6 +605,17 @@ async function sendAlertToBackend(serverId, serverName, status) {
   } catch (e) {
     console.error('[Slack API] 요청 실패:', e);
   }
+}
+
+/**
+ * 헤더 상태 필터 토글 (app.js에서 호출)
+ */
+export function setOverviewStatusFilter(status) {
+  currentStatusFilter = currentStatusFilter === status ? 'all' : status;
+  document.querySelectorAll('.header-stat').forEach(s => {
+    s.classList.toggle('active', s.dataset.status === currentStatusFilter);
+  });
+  renderServerGrid();
 }
 
 /**

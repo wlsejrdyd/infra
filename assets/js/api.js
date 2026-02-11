@@ -653,3 +653,37 @@ export async function fetchTopProcesses(instance, limit = 10) {
   }
   return processes;
 }
+
+/**
+ * 시스템 정보 조회 (node_uname_info, 프로세스 수 등)
+ * process-exporter 없을 때 fallback용
+ */
+export async function fetchSystemInfo(instance) {
+  const info = { kernel: null, os: null, machine: null, hostname: null, procsRunning: null, procsBlocked: null, fileDescriptors: null, entropy: null, contextSwitches: null };
+  try {
+    const [unameRes, procsRun, procsBlocked, fdAllocated, entropy, contextSwitches] = await Promise.all([
+      fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent(`node_uname_info{instance="${instance}"}`)}`).then(r => r.json()).catch(() => null),
+      fetchPrometheusMetric(`node_procs_running{instance="${instance}"}`),
+      fetchPrometheusMetric(`node_procs_blocked{instance="${instance}"}`),
+      fetchPrometheusMetric(`node_filefd_allocated{instance="${instance}"}`),
+      fetchPrometheusMetric(`node_entropy_available_bits{instance="${instance}"}`),
+      fetchPrometheusMetric(`irate(node_context_switches_total{instance="${instance}"}[5m])`),
+    ]);
+
+    if (unameRes?.status === 'success' && unameRes.data.result.length > 0) {
+      const m = unameRes.data.result[0].metric;
+      info.kernel = m.release;
+      info.os = m.sysname;
+      info.machine = m.machine;
+      info.hostname = m.nodename;
+    }
+    info.procsRunning = procsRun;
+    info.procsBlocked = procsBlocked;
+    info.fileDescriptors = fdAllocated;
+    info.entropy = entropy;
+    info.contextSwitches = contextSwitches;
+  } catch (e) {
+    console.error('Failed to fetch system info:', e);
+  }
+  return info;
+}
