@@ -258,7 +258,11 @@ async function updateServerGrid() {
     const isRecovery = curr === 'healthy' && prev && (prev === 'warning' || prev === 'critical');
     const isNewAlert = isAlert && (!prev || prev !== curr);
 
+    if (prev !== curr) {
+      console.log(`[상태변화] ${server.name}: ${prev || '(초기)'} → ${curr}`);
+    }
     if (isNewAlert || isRecovery) {
+      console.log(`[알림발송] ${server.name}: ${curr}`);
       sendAlertToBackend(server.id, server.name, curr);
     }
     previousStatusMap[server.id] = curr;
@@ -454,13 +458,15 @@ function startAutoUpdate() {
  */
 async function sendAlertToBackend(serverId, serverName, status) {
   try {
-    await fetch('/api/alert', {
+    const res = await fetch('/api/alert', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ serverId, serverName, status })
     });
+    const data = await res.json();
+    console.log(`[Slack API] ${serverName}(${status}):`, res.status, data);
   } catch (e) {
-    console.error('Failed to send alert:', e);
+    console.error('[Slack API] 요청 실패:', e);
   }
 }
 
