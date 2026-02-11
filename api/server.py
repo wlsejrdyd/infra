@@ -21,6 +21,8 @@ def _load_env_file():
                 line = line.strip()
                 if not line or line.startswith('#'):
                     continue
+                if line.startswith('export '):
+                    line = line[7:]
                 if '=' in line:
                     key, _, value = line.partition('=')
                     key = key.strip()
