@@ -10,6 +10,7 @@ CORS(app)
 
 SERVERS_FILE = '/app/infra/assets/data/servers.json'
 ALERT_STATE_FILE = '/app/infra/api/alert_state.json'
+ALERT_CONFIG_FILE = '/app/infra/api/alert_config.json'
 ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
 
 
@@ -119,6 +120,36 @@ def _slack_reply(channel, thread_ts, text):
         app.logger.error(f"Slack reply failed: {data.get('error')}")
 
 
+def _load_alert_config():
+    """알림 설정 로드 (enabled: true/false)"""
+    if os.path.exists(ALERT_CONFIG_FILE):
+        with open(ALERT_CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    return {'enabled': True}
+
+
+def _save_alert_config(config):
+    with open(ALERT_CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=2)
+
+
+@app.route('/api/alert/config', methods=['GET'])
+def get_alert_config():
+    """알림 설정 조회"""
+    return jsonify(_load_alert_config()), 200
+
+
+@app.route('/api/alert/config', methods=['POST'])
+def set_alert_config():
+    """알림 설정 변경"""
+    body = request.get_json()
+    config = _load_alert_config()
+    if 'enabled' in body:
+        config['enabled'] = bool(body['enabled'])
+    _save_alert_config(config)
+    return jsonify(config), 200
+
+
 @app.route('/api/alert', methods=['POST'])
 def handle_alert():
     """
@@ -128,6 +159,11 @@ def handle_alert():
     - warning/critical: 알림 메시지 발송 (1회), ts 저장
     - healthy: 이전 알림이 있으면 스레드 댓글로 복구 알림, ts 삭제
     """
+    # 알림 비활성화 시 Slack 발송 안 함
+    alert_config = _load_alert_config()
+    if not alert_config.get('enabled', True):
+        return jsonify({'skipped': True, 'message': 'Alerts disabled'}), 200
+
     if not SLACK_BOT_TOKEN or not SLACK_CHANNEL:
         return jsonify({'error': 'Slack not configured'}), 503
 

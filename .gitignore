@@ -35,8 +35,9 @@ Thumbs.db
 application-prod.yml
 application-secret.yml
 
-# Alert state (runtime generated)
+# Alert state & config (runtime generated)
 alert_state.json
+alert_config.json
 
 # Uploads
 /uploads/

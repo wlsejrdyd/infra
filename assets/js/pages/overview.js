@@ -20,7 +20,7 @@ let contentDuplicated = false;
 const GAP = 6;
 let cardStyle = {};
 let notificationPermission = false;
-let alertEnabled = localStorage.getItem('alertEnabled') !== 'false'; // 기본 ON
+let alertEnabled = true; // 서버에서 로드
 let audioCtx = null; // 재사용 AudioContext (브라우저 정책 대응)
 
 // 브라우저 알림 권한 요청
@@ -165,8 +165,13 @@ export async function renderOverview() {
   app.style.overflow = 'hidden';
   app.style.minHeight = '0';
 
-  // 서버 데이터 로드
-  serversData = await fetchServersData();
+  // 서버 데이터 + 알림 설정 병렬 로드
+  const [sData, alertConfig] = await Promise.all([
+    fetchServersData(),
+    fetch('/api/alert/config').then(r => r.json()).catch(() => ({ enabled: true }))
+  ]);
+  serversData = sData;
+  alertEnabled = alertConfig.enabled !== false;
 
   // 프로젝트 목록 추출
   const projects = ['all', ...new Set(serversData.servers.map(s => s.project))];
@@ -188,7 +193,7 @@ export async function renderOverview() {
             <button class="view-btn ${currentRows === 5 ? 'active' : ''}" data-rows="5">5행</button>
           </div>
           <button class="project-filter-btn" onclick="location.reload()">🔄</button>
-          <button class="project-filter-btn ${alertEnabled ? 'active' : ''}" id="alertToggleBtn" title="알림 ON/OFF">${alertEnabled ? '🔔 알림' : '🔕 알림'}</button>
+          <button class="project-filter-btn ${alertEnabled ? 'active' : ''}" id="alertToggleBtn" title="Slack 알림 ON/OFF">${alertEnabled ? '🔔 Slack' : '🔕 Slack'}</button>
           <button class="project-filter-btn active" onclick="window.location.hash='/admin'">⚙️ 관리</button>
         </div>
       </div>
@@ -229,13 +234,21 @@ export async function renderOverview() {
     });
   });
 
-  // 알림 토글
-  document.getElementById('alertToggleBtn')?.addEventListener('click', () => {
+  // 알림 토글 (서버 측 저장 — 모든 클라이언트 공통 적용)
+  document.getElementById('alertToggleBtn')?.addEventListener('click', async () => {
     alertEnabled = !alertEnabled;
-    localStorage.setItem('alertEnabled', alertEnabled);
     const btn = document.getElementById('alertToggleBtn');
-    btn.textContent = alertEnabled ? '🔔 알림' : '🔕 알림';
+    btn.textContent = alertEnabled ? '🔔 Slack' : '🔕 Slack';
     btn.classList.toggle('active', alertEnabled);
+    try {
+      await fetch('/api/alert/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: alertEnabled })
+      });
+    } catch (e) {
+      console.error('[알림설정] 저장 실패:', e);
+    }
   });
 
   // 헤더 상태 필터 토글
