@@ -1,26 +1,49 @@
 // assets/js/pages/overview.js
 import { fetchServersData, fetchServerMetrics } from '/assets/js/api.js';
-import { router } from '/assets/js/router.js';
 
 let serversData = { servers: [], defaultThresholds: {} };
 let currentFilter = 'all';
 let currentStatusFilter = 'all';
-let currentView = 'medium'; // large | medium
+let currentRows = 3; // 3행 | 5행
 let updateInterval = null;
-let previousStatusMap = {};  // 상태 변화 감지용
+let previousStatusMap = {};
 
-// 슬라이딩 관련 상태
+// 슬라이딩 & 드래그 상태
 let slideAnim = null;
 let slidePos = 0;
 let isPaused = false;
+let isDragging = false;
+let dragStartX = 0;
+let dragStartPos = 0;
+let contentDuplicated = false;
 
-// 뷰 설정 (카드 크기)
-const VIEW_CONFIG = {
-  large:  { width: 280, height: 110, pad: '0.85rem', nameSize: '0.95rem', barH: '5px', labelW: '36px', lblSize: '0.7rem', valSize: '0.7rem', valW: '34px', nameMb: '0.4rem', metricGap: '3px', radius: '12px' },
-  medium: { width: 200, height: 82,  pad: '0.55rem',  nameSize: '0.82rem', barH: '4px', labelW: '28px', lblSize: '0.62rem', valSize: '0.62rem', valW: '30px', nameMb: '0.25rem', metricGap: '2px', radius: '10px' },
-};
+const GAP = 6;
+let cardStyle = {};
 
-const GAP = 6; // px
+function clamp(min, val, max) { return Math.min(max, Math.max(min, val)); }
+
+/**
+ * 카드 스타일 동적 계산 (행 수 + 가용 높이 기반)
+ */
+function calcCardStyle(rows, availH) {
+  const h = Math.max(60, Math.floor((availH - (rows - 1) * GAP) / rows));
+  const w = Math.floor(h * 2.3);
+  const s = h / 100; // scale factor (기준 100px)
+  return {
+    width: w, height: h,
+    pad: `${Math.max(4, Math.round(8 * s))}px`,
+    nameSize: `${clamp(0.6, 0.88 * s, 1.2).toFixed(2)}rem`,
+    barH: `${Math.max(3, Math.round(5 * s))}px`,
+    labelW: `${Math.max(22, Math.round(32 * s))}px`,
+    lblSize: `${clamp(0.5, 0.65 * s, 0.85).toFixed(2)}rem`,
+    valSize: `${clamp(0.5, 0.65 * s, 0.85).toFixed(2)}rem`,
+    valW: `${Math.max(26, Math.round(34 * s))}px`,
+    nameMb: `${Math.max(2, Math.round(4 * s))}px`,
+    metricGap: `${Math.max(1, Math.round(3 * s))}px`,
+    radius: `${Math.max(6, Math.round(10 * s))}px`,
+    projSize: `${clamp(0.45, 0.55 * s, 0.7).toFixed(2)}rem`,
+  };
+}
 
 /**
  * Overview 페이지 렌더링
@@ -47,7 +70,6 @@ export async function renderOverview() {
 
   app.innerHTML = `
     <div class="overview-layout">
-      <!-- Toolbar -->
       <div class="overview-toolbar">
         <div class="project-filter" id="projectFilter">
           ${projects.map(proj => `
@@ -59,23 +81,20 @@ export async function renderOverview() {
         </div>
         <div style="display:flex;align-items:center;gap:0.75rem;">
           <div class="view-toggle">
-            <button class="view-btn ${currentView === 'large' ? 'active' : ''}" data-view="large">3열</button>
-            <button class="view-btn ${currentView === 'medium' ? 'active' : ''}" data-view="medium">5열</button>
+            <button class="view-btn ${currentRows === 3 ? 'active' : ''}" data-rows="3">3행</button>
+            <button class="view-btn ${currentRows === 5 ? 'active' : ''}" data-rows="5">5행</button>
           </div>
           <button class="project-filter-btn" onclick="location.reload()">🔄</button>
           <button class="project-filter-btn active" onclick="window.location.hash='/admin'">⚙️ 관리</button>
         </div>
       </div>
 
-      <!-- Main Content -->
       <div class="overview-content">
-        <!-- Pinned: critical + warning (항상 고정) -->
         <div class="pinned-section" id="pinnedSection">
           <div class="section-label">🔴 주의 필요 — 고정 표시</div>
           <div class="pinned-grid" id="pinnedGrid"></div>
         </div>
 
-        <!-- Scrolling: healthy + offline (자동 슬라이딩) -->
         <div class="scroll-section" id="scrollSection">
           <div class="section-label" id="scrollLabel">✅ 정상 / 💤 오프라인</div>
           <div class="scroll-container" id="scrollContainer">
@@ -86,7 +105,7 @@ export async function renderOverview() {
     </div>
   `;
 
-  // 프로젝트 필터 버튼 이벤트
+  // 프로젝트 필터
   document.querySelectorAll('.project-filter-btn[data-project]').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.project-filter-btn[data-project]').forEach(b => b.classList.remove('active'));
@@ -96,25 +115,21 @@ export async function renderOverview() {
     });
   });
 
-  // 뷰 모드 토글 이벤트
+  // 행 모드 토글
   document.querySelectorAll('.view-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      currentView = btn.dataset.view;
+      currentRows = parseInt(btn.dataset.rows);
       renderServerGrid();
     });
   });
 
-  // 헤더 상태 카드 클릭 이벤트 (상태 필터 토글)
+  // 헤더 상태 필터 토글
   document.querySelectorAll('.header-stat').forEach(stat => {
     stat.addEventListener('click', () => {
       const status = stat.dataset.status;
-      if (currentStatusFilter === status) {
-        currentStatusFilter = 'all';
-      } else {
-        currentStatusFilter = status;
-      }
+      currentStatusFilter = currentStatusFilter === status ? 'all' : status;
       document.querySelectorAll('.header-stat').forEach(s => {
         s.classList.toggle('active', s.dataset.status === currentStatusFilter);
       });
@@ -122,23 +137,91 @@ export async function renderOverview() {
     });
   });
 
-  // Hover pause for sliding
-  const scrollContainer = document.getElementById('scrollContainer');
-  if (scrollContainer) {
-    scrollContainer.addEventListener('mouseenter', () => { isPaused = true; });
-    scrollContainer.addEventListener('mouseleave', () => { isPaused = false; });
-  }
+  // 드래그 스크롤 설정
+  setupDragScroll();
 
-  // 윈도우 리사이즈 대응
+  // 윈도우 리사이즈
   window._overviewResizeHandler = () => {
     clearTimeout(window._overviewResizeTimer);
     window._overviewResizeTimer = setTimeout(renderServerGrid, 200);
   };
   window.addEventListener('resize', window._overviewResizeHandler);
 
-  // 초기 렌더링 및 업데이트 시작
+  // 초기 렌더링
   await updateServerGrid();
   startAutoUpdate();
+}
+
+/**
+ * 드래그 스크롤 설정 (마우스 + 터치)
+ */
+function setupDragScroll() {
+  const container = document.getElementById('scrollContainer');
+  if (!container) return;
+
+  // 드래그 시작
+  function onDragStart(clientX) {
+    isDragging = true;
+    isPaused = true;
+    dragStartX = clientX;
+    dragStartPos = slidePos;
+    window._wasDragged = false;
+    container.style.cursor = 'grabbing';
+  }
+
+  // 드래그 중
+  function onDragMove(clientX) {
+    if (!isDragging) return;
+    const dx = clientX - dragStartX;
+    if (Math.abs(dx) > 5) window._wasDragged = true;
+    applySlidePos(dragStartPos - dx);
+  }
+
+  // 드래그 끝
+  function onDragEnd() {
+    if (!isDragging) return;
+    isDragging = false;
+    isPaused = false;
+    container.style.cursor = 'grab';
+    // wasDragged 플래그를 약간 지연 후 리셋 (click 이벤트 방지용)
+    setTimeout(() => { window._wasDragged = false; }, 50);
+  }
+
+  // 마우스 이벤트
+  container.addEventListener('mousedown', e => { e.preventDefault(); onDragStart(e.clientX); });
+  window.addEventListener('mousemove', e => onDragMove(e.clientX));
+  window.addEventListener('mouseup', onDragEnd);
+
+  // 터치 이벤트
+  container.addEventListener('touchstart', e => onDragStart(e.touches[0].clientX), { passive: true });
+  container.addEventListener('touchmove', e => onDragMove(e.touches[0].clientX), { passive: true });
+  container.addEventListener('touchend', onDragEnd);
+
+  container.style.cursor = 'grab';
+}
+
+/**
+ * 슬라이드 위치 적용 (wrap-around 처리)
+ */
+function applySlidePos(newPos) {
+  const track = document.getElementById('scrollTrack');
+  if (!track) return;
+
+  if (contentDuplicated) {
+    const halfW = track.scrollWidth / 2;
+    if (halfW > 0) {
+      newPos = ((newPos % halfW) + halfW) % halfW;
+    }
+  } else {
+    const container = document.getElementById('scrollContainer');
+    if (container) {
+      const maxScroll = Math.max(0, track.scrollWidth - container.clientWidth);
+      newPos = Math.max(0, Math.min(newPos, maxScroll));
+    }
+  }
+
+  slidePos = newPos;
+  track.style.transform = `translateX(-${slidePos}px)`;
 }
 
 /**
@@ -167,7 +250,7 @@ async function updateServerGrid() {
     previousStatusMap[server.id] = currStatus;
   }
 
-  // 헤더 통계 업데이트
+  // 헤더 통계
   const okEl = document.getElementById('headerOk');
   const warnEl = document.getElementById('headerWarn');
   const critEl = document.getElementById('headerCrit');
@@ -181,70 +264,63 @@ async function updateServerGrid() {
 }
 
 /**
- * 서버 그리드 렌더링 (pinned + scroll 분리, 멀티행 슬라이딩)
+ * 서버 그리드 렌더링 (pinned + scroll, 동적 카드 크기, 드래그 스크롤)
  */
 function renderServerGrid() {
-  // 프로젝트 필터 + 상태 필터 적용
   let filteredServers = serversData.servers.filter(s => {
     const projectMatch = currentFilter === 'all' || s.project === currentFilter;
     const statusMatch = currentStatusFilter === 'all' || s._status === currentStatusFilter;
     return projectMatch && statusMatch;
   });
 
-  // 상태별 자동 정렬: critical → warning → healthy → offline
+  // 상태별 정렬: critical → warning → healthy → offline
   const statusOrder = { critical: 0, warning: 1, healthy: 2, offline: 3 };
-  filteredServers.sort((a, b) => {
-    const orderA = statusOrder[a._status] ?? 4;
-    const orderB = statusOrder[b._status] ?? 4;
-    return orderA - orderB;
-  });
+  filteredServers.sort((a, b) => (statusOrder[a._status] ?? 4) - (statusOrder[b._status] ?? 4));
 
-  // Pinned(critical/warning) vs Scrolling(healthy/offline) 분리
   const pinned = filteredServers.filter(s => s._status === 'critical' || s._status === 'warning');
   const scrolling = filteredServers.filter(s => s._status === 'healthy' || s._status === 'offline');
 
-  // Pinned 섹션 렌더링
-  const pinnedSection = document.getElementById('pinnedSection');
-  const pinnedGrid = document.getElementById('pinnedGrid');
-  if (pinnedSection && pinnedGrid) {
-    if (pinned.length > 0) {
-      pinnedSection.style.display = '';
-      pinnedGrid.innerHTML = pinned.map(s => renderCompactCard(s)).join('');
-    } else {
-      pinnedSection.style.display = 'none';
-    }
-  }
-
-  // Scrolling 섹션 렌더링 (멀티행 + 자동 슬라이딩)
   const track = document.getElementById('scrollTrack');
   const container = document.getElementById('scrollContainer');
   if (!track || !container) return;
 
   stopSliding();
+  contentDuplicated = false;
   track.innerHTML = '';
   track.style.height = '0';
   track.style.transform = 'translateX(0)';
-
-  if (scrolling.length === 0) {
-    const scrollLabel = document.getElementById('scrollLabel');
-    if (scrollLabel) scrollLabel.textContent = '모든 서버가 주의 상태이거나 필터에 해당하는 서버가 없습니다.';
-    return;
-  }
+  slidePos = 0;
 
   // Layout 확정 후 높이 계산
   requestAnimationFrame(() => {
     const availH = container.clientHeight;
-    const v = VIEW_CONFIG[currentView];
+    if (availH <= 0) return;
 
-    // 화면에 맞는 행 수 (짤리면 한 줄 제거)
-    const rows = Math.max(1, Math.floor((availH + GAP) / (v.height + GAP)));
-    const trackH = rows * (v.height + GAP) - GAP;
+    // 카드 스타일 계산 (행 수 기반)
+    cardStyle = calcCardStyle(currentRows, availH);
+    const trackH = currentRows * (cardStyle.height + GAP) - GAP;
     track.style.height = trackH + 'px';
 
-    // 레이블 업데이트
+    // Pinned 섹션 (같은 카드 크기 사용)
+    const pinnedSection = document.getElementById('pinnedSection');
+    const pinnedGrid = document.getElementById('pinnedGrid');
+    if (pinnedSection && pinnedGrid) {
+      if (pinned.length > 0) {
+        pinnedSection.style.display = '';
+        pinnedGrid.innerHTML = pinned.map(s => renderCompactCard(s)).join('');
+      } else {
+        pinnedSection.style.display = 'none';
+      }
+    }
+
+    // 레이블
     const scrollLabel = document.getElementById('scrollLabel');
+    if (scrolling.length === 0) {
+      if (scrollLabel) scrollLabel.textContent = '모든 서버가 주의 상태이거나 필터에 해당하는 서버가 없습니다.';
+      return;
+    }
     if (scrollLabel) {
-      scrollLabel.innerHTML = `✅ 정상 / 💤 오프라인 — ${rows}행 자동 슬라이딩 <span style="font-size:0.6rem;color:var(--text-muted);margin-left:8px;font-weight:400;">(hover 시 정지)</span>`;
+      scrollLabel.innerHTML = `✅ 정상 / 💤 오프라인 — ${currentRows}행 <span style="font-size:0.6rem;color:var(--text-muted);margin-left:8px;font-weight:400;">(드래그로 좌우 이동)</span>`;
     }
 
     // 카드 렌더링
@@ -255,6 +331,7 @@ function renderServerGrid() {
     requestAnimationFrame(() => {
       if (track.scrollWidth > container.clientWidth) {
         track.innerHTML = cards + cards;
+        contentDuplicated = true;
         startSliding();
       }
     });
@@ -262,10 +339,10 @@ function renderServerGrid() {
 }
 
 /**
- * 컴팩트 카드 렌더링 (overview용)
+ * 컴팩트 카드 렌더링
  */
 function renderCompactCard(server) {
-  const v = VIEW_CONFIG[currentView];
+  const v = cardStyle;
   const metrics = server._metrics || {};
   const status = server._status || 'offline';
   const off = status === 'offline';
@@ -273,9 +350,9 @@ function renderCompactCard(server) {
 
   const gc = (val, type) => {
     if (!val) return 'var(--text-muted)';
-    const thresholds = serversData.defaultThresholds[type];
-    if (val >= thresholds.critical) return 'var(--danger)';
-    if (val >= thresholds.warning) return 'var(--warning)';
+    const th = serversData.defaultThresholds[type];
+    if (val >= th.critical) return 'var(--danger)';
+    if (val >= th.warning) return 'var(--warning)';
     return 'var(--success)';
   };
 
@@ -284,16 +361,16 @@ function renderCompactCard(server) {
   const disk = metrics.disk;
 
   return `
-    <div style="background:var(--bg-card);border:1px solid ${bc};border-radius:${v.radius};padding:${v.pad};cursor:pointer;width:${v.width}px;height:${v.height}px;flex-shrink:0;transition:border-color 0.2s;overflow:hidden;"
+    <div style="background:var(--bg-card);border:1px solid ${bc};border-radius:${v.radius};padding:${v.pad};cursor:pointer;width:${v.width}px;height:${v.height}px;flex-shrink:0;transition:border-color 0.2s;overflow:hidden;box-sizing:border-box;"
          onmouseover="this.style.borderColor='var(--accent)'"
          onmouseout="this.style.borderColor='${bc}'"
-         onclick="window.location.hash='/server/${server.id}'">
+         onclick="if(!window._wasDragged)window.location.hash='/server/${server.id}'">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${v.nameMb};">
         <div style="display:flex;align-items:center;gap:5px;overflow:hidden;flex:1;">
           <div class="si ${status}"></div>
           <span style="font-size:${v.nameSize};font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${server.name}</span>
         </div>
-        <span style="font-size:0.55rem;color:var(--text-muted);flex-shrink:0;margin-left:4px;">${server.project}</span>
+        <span style="font-size:${v.projSize};color:var(--text-muted);flex-shrink:0;margin-left:4px;">${server.project}</span>
       </div>
       ${[
         { label: 'CPU',  val: cpu,  type: 'cpu' },
@@ -310,24 +387,21 @@ function renderCompactCard(server) {
 }
 
 /**
- * 자동 슬라이딩 시작
+ * 자동 슬라이딩
  */
 function startSliding() {
   if (slideAnim) cancelAnimationFrame(slideAnim);
-  slidePos = 0;
 
   const track = document.getElementById('scrollTrack');
   if (!track) return;
 
-  const speed = 0.3; // px/frame (~18px/sec at 60fps)
+  const speed = 0.3;
 
   function step() {
-    if (!isPaused) {
+    if (!isPaused && !isDragging) {
       slidePos += speed;
-      const halfWidth = track.scrollWidth / 2;
-      if (halfWidth > 0 && slidePos >= halfWidth) {
-        slidePos = 0;
-      }
+      const halfW = track.scrollWidth / 2;
+      if (halfW > 0 && slidePos >= halfW) slidePos = 0;
       track.style.transform = `translateX(-${slidePos}px)`;
     }
     slideAnim = requestAnimationFrame(step);
@@ -336,9 +410,6 @@ function startSliding() {
   slideAnim = requestAnimationFrame(step);
 }
 
-/**
- * 슬라이딩 중지
- */
 function stopSliding() {
   if (slideAnim) {
     cancelAnimationFrame(slideAnim);
@@ -351,40 +422,19 @@ function stopSliding() {
  */
 function getServerStatus(metrics, thresholds) {
   if (metrics.status === 'offline') return 'offline';
-
   const { cpu, memory, disk } = metrics;
-
-  if (
-    (cpu && cpu >= thresholds.cpu.critical) ||
-    (memory && memory >= thresholds.memory.critical) ||
-    (disk && disk >= thresholds.disk.critical)
-  ) {
-    return 'critical';
-  }
-
-  if (
-    (cpu && cpu >= thresholds.cpu.warning) ||
-    (memory && memory >= thresholds.memory.warning) ||
-    (disk && disk >= thresholds.disk.warning)
-  ) {
-    return 'warning';
-  }
-
+  if ((cpu && cpu >= thresholds.cpu.critical) || (memory && memory >= thresholds.memory.critical) || (disk && disk >= thresholds.disk.critical)) return 'critical';
+  if ((cpu && cpu >= thresholds.cpu.warning) || (memory && memory >= thresholds.memory.warning) || (disk && disk >= thresholds.disk.warning)) return 'warning';
   return 'healthy';
 }
 
-/**
- * 자동 업데이트 시작
- */
 function startAutoUpdate() {
   if (updateInterval) clearInterval(updateInterval);
-  updateInterval = setInterval(() => {
-    updateServerGrid();
-  }, 10000);
+  updateInterval = setInterval(() => updateServerGrid(), 10000);
 }
 
 /**
- * Slack 알림 전송 (백엔드 경유)
+ * Slack 알림 전송
  */
 async function sendAlertToBackend(serverId, serverName, status) {
   try {
@@ -402,13 +452,9 @@ async function sendAlertToBackend(serverId, serverName, status) {
  * 정리
  */
 export function cleanupOverview() {
-  if (updateInterval) {
-    clearInterval(updateInterval);
-    updateInterval = null;
-  }
+  if (updateInterval) { clearInterval(updateInterval); updateInterval = null; }
   stopSliding();
 
-  // body 스타일 복원
   document.body.style.height = '';
   document.body.style.overflow = '';
   document.body.style.display = '';
@@ -423,7 +469,6 @@ export function cleanupOverview() {
     app.style.minHeight = '';
   }
 
-  // 리사이즈 핸들러 제거
   if (window._overviewResizeHandler) {
     window.removeEventListener('resize', window._overviewResizeHandler);
     window._overviewResizeHandler = null;

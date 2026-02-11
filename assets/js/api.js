@@ -51,14 +51,32 @@ export async function fetchServerMetrics(instance) {
       metrics.memory = ((memTotal - memAvail) / memTotal * 100);
     }
 
-    const diskTotalQuery = `node_filesystem_size_bytes{instance="${instance}",mountpoint="/"}`;
-    const diskAvailQuery = `node_filesystem_avail_bytes{instance="${instance}",mountpoint="/"}`;
-    
-    const diskTotal = await fetchPrometheusMetric(diskTotalQuery);
-    const diskAvail = await fetchPrometheusMetric(diskAvailQuery);
-    
-    if (diskTotal && diskAvail) {
-      metrics.disk = ((diskTotal - diskAvail) / diskTotal * 100);
+    // 모든 실제 파일시스템 조회 → 사용률 가장 높은 디스크 표시
+    const diskSizeQuery = `node_filesystem_size_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat"}`;
+    const diskAvailQuery = `node_filesystem_avail_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat"}`;
+
+    const diskSizeRes = await fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent(diskSizeQuery)}`);
+    const diskSizeData = await diskSizeRes.json();
+    const diskAvailRes = await fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent(diskAvailQuery)}`);
+    const diskAvailData = await diskAvailRes.json();
+
+    if (diskSizeData.status === 'success' && diskAvailData.status === 'success') {
+      const availMap = {};
+      diskAvailData.data.result.forEach(r => {
+        availMap[r.metric.mountpoint] = parseFloat(r.value[1]);
+      });
+
+      let maxUsage = 0;
+      diskSizeData.data.result.forEach(r => {
+        const total = parseFloat(r.value[1]);
+        const avail = availMap[r.metric.mountpoint];
+        if (total > 0 && avail !== undefined) {
+          const usage = ((total - avail) / total) * 100;
+          if (usage > maxUsage) maxUsage = usage;
+        }
+      });
+
+      if (maxUsage > 0) metrics.disk = maxUsage;
     }
 
     const bootTimeQuery = `node_boot_time_seconds{instance="${instance}"}`;
