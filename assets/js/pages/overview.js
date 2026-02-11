@@ -24,24 +24,33 @@ function clamp(min, val, max) { return Math.min(max, Math.max(min, val)); }
 
 /**
  * 카드 스타일 동적 계산 (행 수 + 가용 높이 기반)
+ * 카드 최대 높이를 제한하고 남는 공간은 행 간격으로 분배
  */
 function calcCardStyle(rows, availH) {
-  const h = Math.max(60, Math.floor((availH - (rows - 1) * GAP) / rows));
+  const MAX_H = 155;
+  const rawH = Math.floor((availH - (rows - 1) * GAP) / rows);
+  const h = clamp(60, rawH, MAX_H);
   const w = Math.floor(h * 2.3);
-  const s = h / 100; // scale factor (기준 100px)
+  const s = h / 100;
+
+  // 남는 공간을 행 간격으로 분배 (최대 30px)
+  const usedH = rows * h;
+  const extraGap = rows > 1 ? Math.min(Math.floor((availH - usedH) / (rows - 1)), 30) : 0;
+  const dynGap = GAP + extraGap;
+
   return {
-    width: w, height: h,
+    width: w, height: h, dynGap,
     pad: `${Math.max(4, Math.round(8 * s))}px`,
-    nameSize: `${clamp(0.6, 0.88 * s, 1.2).toFixed(2)}rem`,
+    nameSize: `${clamp(0.6, 0.88 * s, 1.4).toFixed(2)}rem`,
     barH: `${Math.max(3, Math.round(5 * s))}px`,
     labelW: `${Math.max(22, Math.round(32 * s))}px`,
-    lblSize: `${clamp(0.5, 0.65 * s, 0.85).toFixed(2)}rem`,
-    valSize: `${clamp(0.5, 0.65 * s, 0.85).toFixed(2)}rem`,
+    lblSize: `${clamp(0.5, 0.65 * s, 1.0).toFixed(2)}rem`,
+    valSize: `${clamp(0.5, 0.65 * s, 1.0).toFixed(2)}rem`,
     valW: `${Math.max(26, Math.round(34 * s))}px`,
     nameMb: `${Math.max(2, Math.round(4 * s))}px`,
     metricGap: `${Math.max(1, Math.round(3 * s))}px`,
     radius: `${Math.max(6, Math.round(10 * s))}px`,
-    projSize: `${clamp(0.45, 0.55 * s, 0.7).toFixed(2)}rem`,
+    projSize: `${clamp(0.45, 0.55 * s, 0.75).toFixed(2)}rem`,
   };
 }
 
@@ -230,24 +239,29 @@ function applySlidePos(newPos) {
 async function updateServerGrid() {
   const stats = { healthy: 0, warning: 0, critical: 0, offline: 0 };
 
-  for (const server of serversData.servers) {
+  // 모든 서버 메트릭 병렬 fetch (순차 대비 ~N배 빠름)
+  await Promise.all(serversData.servers.map(async (server) => {
     const metrics = await fetchServerMetrics(server.instance);
     server._metrics = metrics;
     const status = getServerStatus(metrics, serversData.defaultThresholds);
     server._status = status;
     stats[status]++;
-  }
+  }));
 
   // 상태 변화 감지 → Slack 알림
+  // - warning/critical: 첫 로드 시에도 알림 시도 (백엔드가 중복 차단)
+  // - healthy 복구: 이전에 warning/critical이었던 경우만
   for (const server of serversData.servers) {
-    const prevStatus = previousStatusMap[server.id];
-    const currStatus = server._status;
-    if (prevStatus && prevStatus !== currStatus) {
-      if (currStatus === 'warning' || currStatus === 'critical' || currStatus === 'healthy') {
-        sendAlertToBackend(server.id, server.name, currStatus);
-      }
+    const prev = previousStatusMap[server.id];
+    const curr = server._status;
+    const isAlert = curr === 'warning' || curr === 'critical';
+    const isRecovery = curr === 'healthy' && prev && (prev === 'warning' || prev === 'critical');
+    const isNewAlert = isAlert && (!prev || prev !== curr);
+
+    if (isNewAlert || isRecovery) {
+      sendAlertToBackend(server.id, server.name, curr);
     }
-    previousStatusMap[server.id] = currStatus;
+    previousStatusMap[server.id] = curr;
   }
 
   // 헤더 통계
@@ -296,10 +310,12 @@ function renderServerGrid() {
     const availH = container.clientHeight;
     if (availH <= 0) return;
 
-    // 카드 스타일 계산 (행 수 기반)
+    // 카드 스타일 계산 (행 수 기반, 높이 제한 + 남은 공간 → 행 간격)
     cardStyle = calcCardStyle(currentRows, availH);
-    const trackH = currentRows * (cardStyle.height + GAP) - GAP;
+    const dg = cardStyle.dynGap;
+    const trackH = currentRows * cardStyle.height + (currentRows - 1) * dg;
     track.style.height = trackH + 'px';
+    track.style.gap = dg + 'px';
 
     // Pinned 섹션 (같은 카드 크기 사용)
     const pinnedSection = document.getElementById('pinnedSection');
@@ -361,7 +377,7 @@ function renderCompactCard(server) {
   const disk = metrics.disk;
 
   return `
-    <div style="background:var(--bg-card);border:1px solid ${bc};border-radius:${v.radius};padding:${v.pad};cursor:pointer;width:${v.width}px;height:${v.height}px;flex-shrink:0;transition:border-color 0.2s;overflow:hidden;box-sizing:border-box;"
+    <div style="background:var(--bg-card);border:1px solid ${bc};border-radius:${v.radius};padding:${v.pad};cursor:pointer;width:${v.width}px;height:${v.height}px;flex-shrink:0;transition:border-color 0.2s;overflow:hidden;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;"
          onmouseover="this.style.borderColor='var(--accent)'"
          onmouseout="this.style.borderColor='${bc}'"
          onclick="if(!window._wasDragged)window.location.hash='/server/${server.id}'">

@@ -38,29 +38,28 @@ export async function fetchServerMetrics(instance) {
 
     metrics.status = 'online';
 
+    // 모든 메트릭 병렬 fetch (순차 대비 ~6배 빠름)
     const cpuQuery = `100 - (avg(irate(node_cpu_seconds_total{instance="${instance}",mode="idle"}[5m])) * 100)`;
-    metrics.cpu = await fetchPrometheusMetric(cpuQuery);
+    const diskSizeQuery = `node_filesystem_size_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat"}`;
+    const diskAvailQuery = `node_filesystem_avail_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat"}`;
 
-    const memTotalQuery = `node_memory_MemTotal_bytes{instance="${instance}"}`;
-    const memAvailQuery = `node_memory_MemAvailable_bytes{instance="${instance}"}`;
-    
-    const memTotal = await fetchPrometheusMetric(memTotalQuery);
-    const memAvail = await fetchPrometheusMetric(memAvailQuery);
-    
+    const [cpu, memTotal, memAvail, diskSizeData, diskAvailData, bootTime] = await Promise.all([
+      fetchPrometheusMetric(cpuQuery),
+      fetchPrometheusMetric(`node_memory_MemTotal_bytes{instance="${instance}"}`),
+      fetchPrometheusMetric(`node_memory_MemAvailable_bytes{instance="${instance}"}`),
+      fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent(diskSizeQuery)}`).then(r => r.json()).catch(() => null),
+      fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent(diskAvailQuery)}`).then(r => r.json()).catch(() => null),
+      fetchPrometheusMetric(`node_boot_time_seconds{instance="${instance}"}`),
+    ]);
+
+    metrics.cpu = cpu;
+
     if (memTotal && memAvail) {
       metrics.memory = ((memTotal - memAvail) / memTotal * 100);
     }
 
-    // 모든 실제 파일시스템 조회 → 사용률 가장 높은 디스크 표시
-    const diskSizeQuery = `node_filesystem_size_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat"}`;
-    const diskAvailQuery = `node_filesystem_avail_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat"}`;
-
-    const diskSizeRes = await fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent(diskSizeQuery)}`);
-    const diskSizeData = await diskSizeRes.json();
-    const diskAvailRes = await fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent(diskAvailQuery)}`);
-    const diskAvailData = await diskAvailRes.json();
-
-    if (diskSizeData.status === 'success' && diskAvailData.status === 'success') {
+    // 모든 실제 파일시스템 중 사용률 가장 높은 디스크
+    if (diskSizeData?.status === 'success' && diskAvailData?.status === 'success') {
       const availMap = {};
       diskAvailData.data.result.forEach(r => {
         availMap[r.metric.mountpoint] = parseFloat(r.value[1]);
@@ -79,9 +78,6 @@ export async function fetchServerMetrics(instance) {
       if (maxUsage > 0) metrics.disk = maxUsage;
     }
 
-    const bootTimeQuery = `node_boot_time_seconds{instance="${instance}"}`;
-    const bootTime = await fetchPrometheusMetric(bootTimeQuery);
-    
     if (bootTime) {
       const uptimeSec = Date.now() / 1000 - bootTime;
       metrics.uptime = {
