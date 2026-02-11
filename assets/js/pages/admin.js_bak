@@ -1,17 +1,15 @@
 // assets/js/pages/admin.js
-import { fetchServersData, saveServersData } from '/assets/js/api.js';
-import { router } from '/assets/js/router.js';
+import { fetchServersData, saveServersData } from '../api.js';
+import { router } from '../router.js';
 
 let serversData = { servers: [], defaultThresholds: {} };
 let editingServer = null;
 
-// 디버깅용 전역 노출
-window._debugServersData = () => serversData;
-
+/**
+ * Admin 페이지 렌더링
+ */
 export async function renderAdmin() {
   serversData = await fetchServersData();
-  
-  console.log('Admin page loaded, serversData:', serversData); // 디버그
   
   const main = document.getElementById('app');
   main.innerHTML = `
@@ -24,38 +22,9 @@ export async function renderAdmin() {
           </button>
         </div>
         <h1 style="font-size: 1.8rem;">서버 관리</h1>
-        <button class="btn btn-primary" id="addServerBtn">
+        <button class="btn btn-primary" onclick="window.showAddServerModal()">
           ➕ 서버 추가
         </button>
-      </div>
-
-      <!-- Node Exporter Install Command -->
-      <div class="card" style="margin-bottom: 1.5rem; background: var(--bg-secondary);">
-        <div class="card-header">
-          <span class="card-title">📦 새 서버 추가 시 필요한 설치 명령어 (root 로 실행)</span>
-        </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <code id="installCmd" style="flex: 1; padding: 12px; background: var(--bg-primary); border-radius: 8px; font-family: monospace; font-size: 0.85rem; overflow-x: auto; white-space: nowrap;">
-            curl -sSL https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz | tar xz && mv node_exporter-1.7.0.linux-amd64/node_exporter /usr/local/bin/ && useradd -rs /bin/false node_exporter && tee /etc/systemd/system/node_exporter.service > /dev/null << 'SERVICE'
-[Unit]
-Description=Node Exporter
-After=network.target
-
-[Service]
-User=node_exporter
-Group=node_exporter
-Type=simple
-ExecStart=/usr/local/bin/node_exporter
-
-[Install]
-WantedBy=multi-user.target
-SERVICE
-systemctl daemon-reload && systemctl enable node_exporter && systemctl start node_exporter
-	  </code>
-          <button class="btn btn-primary" id="copyInstallBtn">
-            📋 복사
-          </button>
-        </div>
       </div>
 
       <!-- Thresholds Settings -->
@@ -98,7 +67,7 @@ systemctl daemon-reload && systemctl enable node_exporter && systemctl start nod
             </div>
           </div>
         </div>
-        <button class="btn btn-primary" id="saveThresholdsBtn" style="margin-top: 1rem;">
+        <button class="btn btn-primary" onclick="window.saveThresholds()" style="margin-top: 1rem;">
           💾 임계치 저장
         </button>
       </div>
@@ -129,37 +98,22 @@ systemctl daemon-reload && systemctl enable node_exporter && systemctl start nod
       </div>
     </div>
 
+    <!-- Add/Edit Server Modal -->
     <div id="serverModal" style="display: none;"></div>
   `;
 
-  // 이벤트 리스너 등록 (onclick 대신 addEventListener 사용)
-  document.getElementById('addServerBtn').addEventListener('click', showAddServerModal);
-  document.getElementById('copyInstallBtn').addEventListener('click', copyInstallCmd);
-  document.getElementById('saveThresholdsBtn').addEventListener('click', async () => {
-    console.log('Save button clicked'); // 디버그
-    await saveThresholds();
-  });
-  
-  // 서버 수정/삭제 버튼에 이벤트 등록
-  document.querySelectorAll('[data-action="edit"]').forEach(btn => {
-    btn.addEventListener('click', () => showEditServerModal(btn.dataset.serverId));
-  });
-  
-  document.querySelectorAll('[data-action="delete"]').forEach(btn => {
-    btn.addEventListener('click', () => deleteServer(btn.dataset.serverId));
-  });
+  // 전역 함수 등록
+  window.showAddServerModal = showAddServerModal;
+  window.showEditServerModal = showEditServerModal;
+  window.deleteServer = deleteServer;
+  window.saveThresholds = saveThresholds;
+  window.closeModal = closeModal;
+  window.saveServer = saveServer;
 }
 
-function copyInstallCmd() {
-  const cmd = document.getElementById('installCmd').textContent.trim();
-  navigator.clipboard.writeText(cmd).then(() => {
-    alert('복사되었습니다! 새 서버에서 실행하세요.');
-  }).catch(err => {
-    console.error('복사 실패:', err);
-    alert('복사 실패. 수동으로 복사해주세요.');
-  });
-}
-
+/**
+ * 서버 테이블 렌더링
+ */
 function renderServerTable() {
   return serversData.servers.map(server => `
     <tr style="border-bottom: 1px solid var(--border);">
@@ -174,10 +128,10 @@ function renderServerTable() {
       <td style="padding: 12px; font-family: monospace; font-size: 0.85rem;">${server.instance}</td>
       <td style="padding: 12px; font-size: 0.85rem; color: var(--text-muted);">${server.description}</td>
       <td style="padding: 12px; text-align: right;">
-        <button class="btn" data-action="edit" data-server-id="${server.id}" style="margin-right: 4px;">
+        <button class="btn" onclick="window.showEditServerModal('${server.id}')" style="margin-right: 4px;">
           ✏️ 수정
         </button>
-        <button class="btn btn-danger" data-action="delete" data-server-id="${server.id}">
+        <button class="btn btn-danger" onclick="window.deleteServer('${server.id}')">
           🗑️ 삭제
         </button>
       </td>
@@ -185,6 +139,9 @@ function renderServerTable() {
   `).join('');
 }
 
+/**
+ * 서버 추가 모달
+ */
 function showAddServerModal() {
   editingServer = null;
   showServerModal({
@@ -197,6 +154,9 @@ function showAddServerModal() {
   });
 }
 
+/**
+ * 서버 수정 모달
+ */
 function showEditServerModal(serverId) {
   editingServer = serversData.servers.find(s => s.id === serverId);
   if (editingServer) {
@@ -204,15 +164,18 @@ function showEditServerModal(serverId) {
   }
 }
 
+/**
+ * 서버 모달 표시
+ */
 function showServerModal(server) {
   const modal = document.getElementById('serverModal');
   modal.style.display = 'block';
   modal.innerHTML = `
-    <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-overlay" onclick="if(event.target === this) window.closeModal()">
       <div class="modal">
         <div class="modal-header">
           <h2 class="modal-title">${editingServer ? '서버 수정' : '서버 추가'}</h2>
-          <button class="modal-close" id="modalCloseBtn">✕</button>
+          <button class="modal-close" onclick="window.closeModal()">✕</button>
         </div>
         
         <div class="form-group">
@@ -252,25 +215,20 @@ function showServerModal(server) {
         </div>
 
         <div style="display: flex; gap: 8px; margin-top: 1.5rem;">
-          <button class="btn" id="modalCancelBtn" style="flex: 1;">취소</button>
-          <button class="btn btn-primary" id="modalSaveBtn" style="flex: 1;">
+          <button class="btn" onclick="window.closeModal()" style="flex: 1;">취소</button>
+          <button class="btn btn-primary" onclick="window.saveServer()" style="flex: 1;">
             ${editingServer ? '저장' : '추가'}
           </button>
         </div>
       </div>
     </div>
   `;
-  
-  // 모달 이벤트
-  document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
-  document.getElementById('modalCancelBtn').addEventListener('click', closeModal);
-  document.getElementById('modalSaveBtn').addEventListener('click', saveServer);
-  document.getElementById('modalOverlay').addEventListener('click', (e) => {
-    if (e.target.id === 'modalOverlay') closeModal();
-  });
 }
 
-async function saveServer() {
+/**
+ * 서버 저장
+ */
+function saveServer() {
   const serverData = {
     id: document.getElementById('serverId').value.trim(),
     name: document.getElementById('serverName').value.trim(),
@@ -280,15 +238,18 @@ async function saveServer() {
     description: document.getElementById('serverDescription').value.trim()
   };
 
+  // 유효성 검사
   if (!serverData.id || !serverData.name || !serverData.project || !serverData.instance) {
     alert('모든 필수 항목을 입력해주세요.');
     return;
   }
 
   if (editingServer) {
+    // 수정
     const index = serversData.servers.findIndex(s => s.id === editingServer.id);
     serversData.servers[index] = { ...editingServer, ...serverData };
   } else {
+    // 추가 - ID 중복 체크
     if (serversData.servers.find(s => s.id === serverData.id)) {
       alert('이미 존재하는 서버 ID입니다.');
       return;
@@ -296,59 +257,70 @@ async function saveServer() {
     serversData.servers.push(serverData);
   }
 
-  const success = await saveServersData(serversData);
+  // 저장
+  saveServersData(serversData);
+  closeModal();
   
-  if (success) {
-    closeModal();
-    document.getElementById('serverTableBody').innerHTML = renderServerTable();
-    alert('서버가 저장되었습니다.');
-  }
+  // 테이블 업데이트
+  document.getElementById('serverTableBody').innerHTML = renderServerTable();
+  
+  alert('서버가 저장되었습니다.');
 }
 
-async function deleteServer(serverId) {
+/**
+ * 서버 삭제
+ */
+function deleteServer(serverId) {
   if (!confirm('정말 이 서버를 삭제하시겠습니까?')) return;
 
   serversData.servers = serversData.servers.filter(s => s.id !== serverId);
+  saveServersData(serversData);
   
-  const success = await saveServersData(serversData);
+  // 테이블 업데이트
+  document.getElementById('serverTableBody').innerHTML = renderServerTable();
   
-  if (success) {
-    document.getElementById('serverTableBody').innerHTML = renderServerTable();
-    alert('서버가 삭제되었습니다.');
-  }
+  alert('서버가 삭제되었습니다.');
 }
 
-async function saveThresholds() {
-  console.log('saveThresholds called'); // 디버그
-  
-  const cpuWarn = parseInt(document.getElementById('cpuWarning').value);
-  const cpuCrit = parseInt(document.getElementById('cpuCritical').value);
-  const memWarn = parseInt(document.getElementById('memWarning').value);
-  const memCrit = parseInt(document.getElementById('memCritical').value);
-  const diskWarn = parseInt(document.getElementById('diskWarning').value);
-  const diskCrit = parseInt(document.getElementById('diskCritical').value);
-  
-  console.log('Threshold values:', { cpuWarn, cpuCrit, memWarn, memCrit, diskWarn, diskCrit }); // 디버그
-  
+/**
+ * 임계치 저장
+ */
+function saveThresholds() {
   serversData.defaultThresholds = {
-    cpu: { warning: cpuWarn, critical: cpuCrit },
-    memory: { warning: memWarn, critical: memCrit },
-    disk: { warning: diskWarn, critical: diskCrit }
+    cpu: {
+      warning: parseInt(document.getElementById('cpuWarning').value),
+      critical: parseInt(document.getElementById('cpuCritical').value)
+    },
+    memory: {
+      warning: parseInt(document.getElementById('memWarning').value),
+      critical: parseInt(document.getElementById('memCritical').value)
+    },
+    disk: {
+      warning: parseInt(document.getElementById('diskWarning').value),
+      critical: parseInt(document.getElementById('diskCritical').value)
+    }
   };
 
-  console.log('Calling saveServersData...', serversData); // 디버그
-  const success = await saveServersData(serversData);
-  console.log('Save result:', success); // 디버그
-  
-  if (success) {
-    alert('임계치가 저장되었습니다.');
-  }
+  saveServersData(serversData);
+  alert('임계치가 저장되었습니다.');
 }
 
+/**
+ * 모달 닫기
+ */
 function closeModal() {
   document.getElementById('serverModal').style.display = 'none';
 }
 
+/**
+ * 정리
+ */
 export function cleanupAdmin() {
-  // 정리 작업
+  // 전역 함수 제거
+  delete window.showAddServerModal;
+  delete window.showEditServerModal;
+  delete window.deleteServer;
+  delete window.saveThresholds;
+  delete window.closeModal;
+  delete window.saveServer;
 }

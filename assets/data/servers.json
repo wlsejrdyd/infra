@@ -1,34 +1,98 @@
 {
-  "servers": [
-    {
-      "id": "rocky-main",
-      "name": "Rocky Linux Main",
-      "project": "Infrastructure",
-      "instance": "localhost:9100",
-      "description": "jindeokyong-Virtual-Machine(Main-Rocky)",
-      "icon": "🖥️"
-    },
-    {
-      "id": "ubuntu-dev",
-      "name": "Ubuntu Test",
-      "project": "Test",
-      "instance": "192.168.100.2:9100",
-      "description": "Test Server",
-      "icon": "🧪"
-    }
-  ],
   "defaultThresholds": {
     "cpu": {
       "warning": 70,
-      "critical": 90
+      "critical": 80
     },
     "memory": {
-      "warning": 80,
-      "critical": 95
+      "warning": 70,
+      "critical": 80
     },
     "disk": {
       "warning": 80,
       "critical": 90
     }
-  }
+  },
+  "servers": [
+    {
+      "description": "jindeokyong-Virtual-Machine(Main-Rocky)",
+      "icon": "🖥️",
+      "id": "rocky-main",
+      "instance": "localhost:9100",
+      "name": "deok",
+      "project": "메인서버"
+    },
+    {
+      "description": "Test Server",
+      "icon": "🧪",
+      "id": "ubuntu-dev",
+      "instance": "192.168.100.2:9100",
+      "name": "jdy-ubuntu-24",
+      "project": "TEST"
+    },
+    {
+      "description": "",
+      "icon": "🖥️",
+      "id": "DataLake-PoC-DB-01",
+      "instance": "192.168.0.25:9100",
+      "name": "DataLake-PoC-DB-01",
+      "project": "DATALAKE"
+    },
+    {
+      "description": "",
+      "icon": "🖥️",
+      "id": "DataLake-PoC-01",
+      "instance": "192.168.0.15:9100",
+      "name": "DataLake-PoC-01",
+      "project": "DATALAKE"
+    },
+    {
+      "description": "",
+      "icon": "🖥️",
+      "id": "DataLake-PoC-02",
+      "instance": "192.168.0.16:9100",
+      "name": "DataLake-PoC-02",
+      "project": "DATALAKE"
+    },
+    {
+      "description": "",
+      "icon": "🖥️",
+      "id": "DataLake-PoC-03",
+      "instance": "192.168.0.17:9100",
+      "name": "DataLake-PoC-03",
+      "project": "DATALAKE"
+    },
+    {
+      "description": "jdy k3s cluster",
+      "icon": "🖥️",
+      "id": "jdy-master-node-01",
+      "instance": "192.168.100.4:9100",
+      "name": "jdy-master-node-01",
+      "project": "TEST"
+    },
+    {
+      "description": "jdy k3s cluster",
+      "icon": "🖥️",
+      "id": "jdy-master-node-02",
+      "instance": "192.168.100.5:9100",
+      "name": "jdy-master-node-02",
+      "project": "TEST"
+    },
+    {
+      "description": "jdy k3s cluster",
+      "icon": "🖥️",
+      "id": "jdy-master-node-03",
+      "instance": "192.168.100.6:9100",
+      "name": "jdy-master-node-03",
+      "project": "TEST"
+    },
+    {
+      "description": "jdy 패키지 다운로드용 서버",
+      "icon": "🖥️",
+      "id": "jdy-download",
+      "instance": "192.168.100.7:9100",
+      "name": "jdy-download",
+      "project": "TEST"
+    }
+  ]
 }

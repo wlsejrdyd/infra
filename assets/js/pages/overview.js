@@ -1,6 +1,6 @@
 // assets/js/pages/overview.js
-import { fetchServersData, fetchServerMetrics } from '../api.js';
-import { router } from '../router.js';
+import { fetchServersData, fetchServerMetrics } from '/assets/js/api.js';
+import { router } from '/assets/js/router.js';
 
 let serversData = { servers: [], defaultThresholds: {} };
 let currentFilter = 'all';

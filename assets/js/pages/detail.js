@@ -1,29 +1,31 @@
 // assets/js/pages/detail.js
-import { fetchServersData, fetchServerMetrics, fetchCpuHistory, fetchServiceStatus, fetchKubernetesData } from '../api.js';
-import { CONFIG } from '../config.js';
-import { router } from '../router.js';
+import { 
+  fetchServerMetrics, 
+  fetchCpuHistory, 
+  fetchMemoryHistory,
+  fetchNetworkTraffic,
+  fetchDiskIO,
+  fetchLoadAverage,
+  fetchServersData 
+} from '/assets/js/api.js';
+import { router } from '/assets/js/router.js';
 
-let currentServer = null;
-let updateInterval = null;
-let cpuChart = null;
+let refreshInterval;
+let cpuChart;
+let memoryChart;
 
-/**
- * Detail 페이지 렌더링
- */
 export async function renderDetail(params) {
   const serverId = params.id;
+  
   const serversData = await fetchServersData();
-  currentServer = serversData.servers.find(s => s.id === serverId);
-
-  if (!currentServer) {
+  const server = serversData.servers.find(s => s.id === serverId);
+  
+  if (!server) {
     document.getElementById('app').innerHTML = `
       <div class="main">
-        <div class="empty-state">
-          <div class="empty-state-icon">❌</div>
-          <div class="empty-state-text">서버를 찾을 수 없습니다.</div>
-          <button class="btn btn-primary" onclick="window.location.hash = '/overview'" style="margin-top: 1rem;">
-            돌아가기
-          </button>
+        <div class="card">
+          <h2>서버를 찾을 수 없습니다.</h2>
+          <button class="btn" onclick="window.location.hash = '/overview'">돌아가기</button>
         </div>
       </div>
     `;
@@ -33,293 +35,333 @@ export async function renderDetail(params) {
   const main = document.getElementById('app');
   main.innerHTML = `
     <div class="main">
-      <!-- Back Button & Server Header -->
-      <div style="margin-bottom: 1rem;">
-        <button class="btn" onclick="window.location.hash = '/overview'">
-          ← 목록으로
-        </button>
-      </div>
-
-      <div class="server-header">
-        <div class="server-info">
-          <div class="server-icon-large">${currentServer.icon}</div>
-          <div class="server-details">
-            <h1>${currentServer.name}</h1>
-            <div class="server-meta">
-              <span class="badge info">${currentServer.project}</span>
-              <span style="margin: 0 8px;">•</span>
-              <span>${currentServer.instance}</span>
+      <!-- Server Header -->
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <div style="font-size: 2.5rem;">${server.icon}</div>
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
+              <h1 style="font-size: 1.5rem; margin: 0;">${server.name}</h1>
+              <span class="badge info">${server.project}</span>
+              <div class="status-indicator" id="serverStatus"></div>
             </div>
+            <div style="font-size: 0.9rem; color: var(--text-muted);">${server.instance}</div>
           </div>
+          <button class="btn" onclick="window.location.hash = '/overview'">← 돌아가기</button>
         </div>
-        <div class="status-indicator" id="serverStatus" style="width: 16px; height: 16px;"></div>
       </div>
 
-      <!-- Metrics Row -->
-      <div class="grid-4">
+      <!-- Metrics Cards -->
+      <div class="grid-4" style="margin-bottom: 1.5rem;">
         <div class="card">
           <div class="card-header">
-            <span class="card-title">CPU Usage</span>
-            <div style="font-size: 1.2rem;">💻</div>
+            <span class="card-title">CPU USAGE</span>
+            <span class="card-icon" style="color: var(--color-blue);">💻</span>
           </div>
-          <div class="metric-value" id="cpuValue">--</div>
-          <div class="metric-sub">node_cpu_seconds_total</div>
+          <div class="metric-value" id="cpuValue">--%</div>
           <div class="progress-bar">
-            <div class="progress-fill" id="cpuBar" style="width: 0%; background: linear-gradient(90deg, var(--accent), #8b5cf6);"></div>
+            <div class="progress-fill" id="cpuProgress" style="background: var(--color-blue);"></div>
           </div>
+          <div class="metric-label" id="cpuLabel">node_cpu_seconds_total</div>
         </div>
 
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Memory Usage</span>
-            <div style="font-size: 1.2rem;">🧠</div>
+            <span class="card-title">MEMORY USAGE</span>
+            <span class="card-icon" style="color: var(--color-pink);">🧠</span>
           </div>
-          <div class="metric-value" id="memValue">--</div>
-          <div class="metric-sub">node_memory_Active_bytes</div>
+          <div class="metric-value" id="memValue">--%</div>
           <div class="progress-bar">
-            <div class="progress-fill" id="memBar" style="width: 0%; background: linear-gradient(90deg, var(--success), #34d399);"></div>
+            <div class="progress-fill" id="memProgress" style="background: var(--color-pink);"></div>
           </div>
+          <div class="metric-label" id="memLabel">node_memory_Active_bytes</div>
         </div>
 
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Disk Usage</span>
-            <div style="font-size: 1.2rem;">💾</div>
+            <span class="card-title">DISK USAGE</span>
+            <span class="card-icon" style="color: var(--color-purple);">💾</span>
           </div>
-          <div class="metric-value" id="diskValue">--</div>
-          <div class="metric-sub">node_filesystem_avail_bytes</div>
+          <div class="metric-value" id="diskValue">--%</div>
           <div class="progress-bar">
-            <div class="progress-fill" id="diskBar" style="width: 0%; background: linear-gradient(90deg, var(--warning), #fbbf24);"></div>
+            <div class="progress-fill" id="diskProgress" style="background: var(--color-purple);"></div>
           </div>
+          <div class="metric-label" id="diskLabel">node_filesystem_avail_bytes</div>
         </div>
 
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Uptime</span>
-            <div style="font-size: 1.2rem;">⏱️</div>
+            <span class="card-title">UPTIME</span>
+            <span class="card-icon">⏱️</span>
           </div>
           <div class="metric-value" id="uptimeValue">--</div>
-          <div class="metric-sub">node_boot_time_seconds</div>
+          <div class="metric-label" id="uptimeLabel">node_boot_time_seconds</div>
         </div>
       </div>
 
-      <!-- Service Status & CPU Chart -->
-      <div class="grid-2">
+      <!-- Charts -->
+      <div class="grid-2" style="margin-bottom: 1.5rem;">
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Service Status</span>
+            <span class="card-title">CPU USAGE (1H)</span>
           </div>
-          <div id="serviceGrid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
-            <div class="loading">로딩 중...</div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">CPU Usage (1h)</span>
-          </div>
-          <div class="chart-container">
+          <div style="position: relative; height: 250px;">
             <canvas id="cpuChart"></canvas>
           </div>
         </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">MEMORY USAGE (1H)</span>
+          </div>
+          <div style="position: relative; height: 250px;">
+            <canvas id="memoryChart"></canvas>
+          </div>
+        </div>
       </div>
 
-      <!-- Kubernetes Section -->
-      <div class="section-title k8s">
-        <span>☸️ Kubernetes Cluster</span>
+      <!-- Network & Disk I/O -->
+      <div class="grid-2" style="margin-bottom: 1.5rem;">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">NETWORK TRAFFIC</span>
+            <span class="card-icon">📡</span>
+          </div>
+          <div style="padding: 1rem 0;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.75rem;">
+              <span style="color: var(--text-muted);">↓ Inbound</span>
+              <span id="networkIn" style="font-size: 1.25rem; font-weight: 600;">-- MB/s</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-muted);">↑ Outbound</span>
+              <span id="networkOut" style="font-size: 1.25rem; font-weight: 600;">-- MB/s</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">DISK I/O</span>
+            <span class="card-icon">💿</span>
+          </div>
+          <div style="padding: 1rem 0;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.75rem;">
+              <span style="color: var(--text-muted);">📖 Read</span>
+              <span id="diskRead" style="font-size: 1.25rem; font-weight: 600;">-- MB/s</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-muted);">✍️ Write</span>
+              <span id="diskWrite" style="font-size: 1.25rem; font-weight: 600;">-- MB/s</span>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="grid-2" id="k8sSection">
-        <div class="loading">Kubernetes 데이터 로딩 중...</div>
+
+      <!-- Load Average -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">LOAD AVERAGE</span>
+          <span class="card-icon">⚖️</span>
+        </div>
+        <div style="display: flex; justify-content: space-around; padding: 1rem 0;">
+          <div style="text-align: center;">
+            <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">1분</div>
+            <div id="load1" style="font-size: 1.5rem; font-weight: 600;">--</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">5분</div>
+            <div id="load5" style="font-size: 1.5rem; font-weight: 600;">--</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">15분</div>
+            <div id="load15" style="font-size: 1.5rem; font-weight: 600;">--</div>
+          </div>
+        </div>
       </div>
     </div>
   `;
 
   // 초기 데이터 로드
-  await updateMetrics();
-  await updateServices();
-  await updateK8s();
-  initCpuChart();
-  
-  // 자동 업데이트 시작
-  startAutoUpdate();
+  await updateServerData(server);
+
+  // 10초마다 갱신
+  refreshInterval = setInterval(() => updateServerData(server), 10000);
 }
 
-/**
- * 메트릭 업데이트
- */
-async function updateMetrics() {
-  const metrics = await fetchServerMetrics(currentServer.instance);
-  
+async function updateServerData(server) {
+  const metrics = await fetchServerMetrics(server.instance);
+  const networkTraffic = await fetchNetworkTraffic(server.instance);
+  const diskIO = await fetchDiskIO(server.instance);
+  const loadAvg = await fetchLoadAverage(server.instance);
+
   // 상태 표시
   const statusEl = document.getElementById('serverStatus');
   if (statusEl) {
-    statusEl.className = `status-indicator ${metrics.status === 'online' ? 'healthy' : 'offline'}`;
+    statusEl.className = `status-indicator ${metrics.status}`;
   }
 
   // CPU
   if (metrics.cpu !== null) {
-    document.getElementById('cpuValue').textContent = metrics.cpu.toFixed(1) + '%';
-    document.getElementById('cpuBar').style.width = metrics.cpu + '%';
+    document.getElementById('cpuValue').textContent = `${metrics.cpu.toFixed(1)}%`;
+    document.getElementById('cpuProgress').style.width = `${metrics.cpu}%`;
   }
 
   // Memory
   if (metrics.memory !== null) {
-    document.getElementById('memValue').textContent = metrics.memory.toFixed(1) + '%';
-    document.getElementById('memBar').style.width = metrics.memory + '%';
+    document.getElementById('memValue').textContent = `${metrics.memory.toFixed(1)}%`;
+    document.getElementById('memProgress').style.width = `${metrics.memory}%`;
   }
 
   // Disk
   if (metrics.disk !== null) {
-    document.getElementById('diskValue').textContent = metrics.disk.toFixed(1) + '%';
-    document.getElementById('diskBar').style.width = metrics.disk + '%';
+    document.getElementById('diskValue').textContent = `${metrics.disk.toFixed(1)}%`;
+    document.getElementById('diskProgress').style.width = `${metrics.disk}%`;
   }
 
   // Uptime
   if (metrics.uptime) {
-    document.getElementById('uptimeValue').textContent = 
-      `${metrics.uptime.days}d ${metrics.uptime.hours}h`;
+    document.getElementById('uptimeValue').textContent = `${metrics.uptime.days}d ${metrics.uptime.hours}h`;
+  }
+
+  // Network Traffic
+  if (networkTraffic.inbound !== null) {
+    document.getElementById('networkIn').textContent = formatBytes(networkTraffic.inbound) + '/s';
+  }
+  if (networkTraffic.outbound !== null) {
+    document.getElementById('networkOut').textContent = formatBytes(networkTraffic.outbound) + '/s';
+  }
+
+  // Disk I/O
+  if (diskIO.read !== null) {
+    document.getElementById('diskRead').textContent = formatBytes(diskIO.read) + '/s';
+  }
+  if (diskIO.write !== null) {
+    document.getElementById('diskWrite').textContent = formatBytes(diskIO.write) + '/s';
+  }
+
+  // Load Average
+  if (loadAvg.load1 !== null) {
+    document.getElementById('load1').textContent = loadAvg.load1.toFixed(2);
+  }
+  if (loadAvg.load5 !== null) {
+    document.getElementById('load5').textContent = loadAvg.load5.toFixed(2);
+  }
+  if (loadAvg.load15 !== null) {
+    document.getElementById('load15').textContent = loadAvg.load15.toFixed(2);
+  }
+
+  // 차트 생성 (첫 실행 시에만)
+  if (!cpuChart) {
+    await createCharts(server.instance);
   }
 }
 
-/**
- * 서비스 상태 업데이트
- */
-async function updateServices() {
-  const statusMap = await fetchServiceStatus();
-  const serviceGrid = document.getElementById('serviceGrid');
+async function createCharts(instance) {
+  const cpuHistory = await fetchCpuHistory(instance);
+  const memoryHistory = await fetchMemoryHistory(instance);
 
-  serviceGrid.innerHTML = CONFIG.services.map(svc => {
-    let status = 'unknown';
-    if (svc.job && statusMap[svc.job] !== undefined) {
-      status = statusMap[svc.job] ? 'up' : 'down';
-    }
-
-    return `
-      <div style="display: flex; align-items: center; gap: 10px; padding: 12px; background: var(--bg-secondary); border-radius: 10px;">
-        <div style="width: 36px; height: 36px; border-radius: 8px; background: ${svc.color}22; color: ${svc.color}; display: flex; align-items: center; justify-content: center; font-size: 1rem;">
-          ${svc.icon}
-        </div>
-        <div style="flex: 1;">
-          <div style="font-weight: 600; font-size: 0.9rem;">${svc.name}</div>
-          <div style="font-size: 0.75rem; color: var(--text-muted);">:${svc.port}</div>
-        </div>
-        <div class="service-status ${status}" style="width: 10px; height: 10px; border-radius: 50%;"></div>
-      </div>
-    `;
-  }).join('');
-}
-
-/**
- * Kubernetes 데이터 업데이트
- */
-async function updateK8s() {
-  const k8sData = await fetchKubernetesData();
-  const k8sSection = document.getElementById('k8sSection');
-
-  k8sSection.innerHTML = `
-    <div class="card k8s">
-      <div class="card-header">
-        <span class="card-title k8s">Pods Status</span>
-      </div>
-      <div style="display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto;">
-        ${k8sData.pods.length > 0 ? k8sData.pods.map(pod => {
-          const statusClass = pod.phase === 'Running' ? 'success' : (pod.phase === 'Pending' ? 'pending' : 'failure');
-          return `
-            <div style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--bg-secondary); border-radius: 8px; border-left: 3px solid var(${statusClass === 'success' ? '--success' : statusClass === 'pending' ? '--warning' : '--danger'});">
-              <div>${pod.name}</div>
-              <div style="margin-left: auto; font-size: 0.75rem; color: var(--text-muted);">${pod.phase}</div>
-            </div>
-          `;
-        }).join('') : '<div class="loading">No pods found</div>'}
-      </div>
-    </div>
-
-    <div class="card k8s">
-      <div class="card-header">
-        <span class="card-title k8s">Cluster Overview</span>
-      </div>
-      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
-        <div style="text-align: center; padding: 12px 8px; background: var(--bg-secondary); border-radius: 10px;">
-          <div style="font-size: 1.4rem; font-weight: 700; color: var(--success);">${k8sData.stats.Running}</div>
-          <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">RUNNING</div>
-        </div>
-        <div style="text-align: center; padding: 12px 8px; background: var(--bg-secondary); border-radius: 10px;">
-          <div style="font-size: 1.4rem; font-weight: 700; color: var(--warning);">${k8sData.stats.Pending}</div>
-          <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">PENDING</div>
-        </div>
-        <div style="text-align: center; padding: 12px 8px; background: var(--bg-secondary); border-radius: 10px;">
-          <div style="font-size: 1.4rem; font-weight: 700; color: var(--danger);">${k8sData.stats.Failed + k8sData.stats.Unknown}</div>
-          <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">FAILED</div>
-        </div>
-        <div style="text-align: center; padding: 12px 8px; background: var(--bg-secondary); border-radius: 10px;">
-          <div style="font-size: 1.4rem; font-weight: 700; color: var(--kubernetes);">${k8sData.pods.length}</div>
-          <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">TOTAL</div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-/**
- * CPU 차트 초기화
- */
-async function initCpuChart() {
-  const ctx = document.getElementById('cpuChart').getContext('2d');
-  const history = await fetchCpuHistory(currentServer.instance);
-
-  const labels = history.map((_, i) => `-${(history.length - 1 - i) * 5}m`);
-  const data = history.map(h => h.value);
-
-  cpuChart = new Chart(ctx, {
+  // CPU Chart
+  const cpuCtx = document.getElementById('cpuChart').getContext('2d');
+  cpuChart = new Chart(cpuCtx, {
     type: 'line',
     data: {
-      labels,
+      labels: cpuHistory.map(d => new Date(d.timestamp * 1000).toLocaleTimeString()),
       datasets: [{
         label: 'CPU %',
-        data,
-        borderColor: '#3b82f6',
+        data: cpuHistory.map(d => d.value),
+        borderColor: 'rgba(59, 130, 246, 1)',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        fill: true,
         tension: 0.4,
-        pointRadius: 0,
-        pointHoverRadius: 5,
-        borderWidth: 2
+        fill: true
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false }
+      },
       scales: {
-        x: { grid: { color: '#1f2937' }, ticks: { color: '#9ca3af', font: { size: 10 } } },
-        y: { min: 0, max: 100, grid: { color: '#1f2937' }, ticks: { color: '#9ca3af', font: { size: 10 } } }
+        y: {
+          beginAtZero: true,
+          max: 100,
+          ticks: { color: '#9ca3af' },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        },
+        x: {
+          ticks: { 
+            color: '#9ca3af',
+            maxRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 8
+          },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        }
+      }
+    }
+  });
+
+  // Memory Chart
+  const memCtx = document.getElementById('memoryChart').getContext('2d');
+  memoryChart = new Chart(memCtx, {
+    type: 'line',
+    data: {
+      labels: memoryHistory.map(d => new Date(d.timestamp * 1000).toLocaleTimeString()),
+      datasets: [{
+        label: 'Memory %',
+        data: memoryHistory.map(d => d.value),
+        borderColor: 'rgba(236, 72, 153, 1)',
+        backgroundColor: 'rgba(236, 72, 153, 0.1)',
+        tension: 0.4,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 100,
+          ticks: { color: '#9ca3af' },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        },
+        x: {
+          ticks: { 
+            color: '#9ca3af',
+            maxRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 8
+          },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        }
       }
     }
   });
 }
 
-/**
- * 자동 업데이트 시작
- */
-function startAutoUpdate() {
-  if (updateInterval) clearInterval(updateInterval);
-  updateInterval = setInterval(async () => {
-    await updateMetrics();
-    await updateServices();
-    await updateK8s();
-  }, 10000);
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  if (bytes < 1024) return bytes.toFixed(2) + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+  return (bytes / 1024 / 1024 / 1024).toFixed(2) + ' GB';
 }
 
-/**
- * 정리
- */
 export function cleanupDetail() {
-  if (updateInterval) {
-    clearInterval(updateInterval);
-    updateInterval = null;
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+    refreshInterval = null;
   }
   if (cpuChart) {
     cpuChart.destroy();
     cpuChart = null;
+  }
+  if (memoryChart) {
+    memoryChart.destroy();
+    memoryChart = null;
   }
 }

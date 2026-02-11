@@ -1,8 +1,8 @@
 // assets/js/app.js
-import { router } from './router.js';
-import { renderOverview, cleanupOverview } from './pages/overview.js';
-import { renderDetail, cleanupDetail } from './pages/detail.js';
-import { renderAdmin, cleanupAdmin } from './pages/admin.js';
+import { router } from '/assets/js/router.js';
+import { renderOverview, cleanupOverview } from '/assets/js/pages/overview.js';
+import { renderDetail, cleanupDetail } from '/assets/js/pages/detail.js';
+import { renderAdmin, cleanupAdmin } from '/assets/js/pages/admin.js';
 
 let currentCleanup = null;
 
