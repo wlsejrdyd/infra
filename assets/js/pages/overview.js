@@ -466,7 +466,15 @@ function renderServerGrid() {
 
     // 카드 렌더링
     const cards = scrolling.map(s => renderCompactCard(s)).join('');
-    track.innerHTML = cards;
+
+    // 마지막 열의 빈 자리를 투명 스페이서로 채워 복제 시 섞임 방지
+    const remainder = scrolling.length % currentRows;
+    const spacerCount = remainder > 0 ? currentRows - remainder : 0;
+    const spacerHtml = `<div style="width:${cardStyle.width}px;height:${cardStyle.height}px;flex-shrink:0;visibility:hidden;pointer-events:none;"></div>`;
+    const spacers = spacerHtml.repeat(spacerCount);
+    const paddedCards = cards + spacers;
+
+    track.innerHTML = paddedCards;
 
     // 슬라이딩 필요 여부: 카드 열 수 기반으로 정확히 계산
     const colCount = Math.ceil(scrolling.length / currentRows);
@@ -474,8 +482,8 @@ function renderServerGrid() {
     const containerW = container.clientWidth;
 
     if (contentW > containerW) {
-      // 원본이 화면을 채우므로 1벌 복제로 무한 루프 가능
-      track.innerHTML = cards + cards;
+      // 스페이서로 열 경계가 정확히 맞으므로 복제본이 다음 열부터 시작
+      track.innerHTML = paddedCards + paddedCards;
       contentDuplicated = true;
       startSliding();
     } else {
