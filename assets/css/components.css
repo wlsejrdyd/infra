@@ -45,19 +45,19 @@
 /* External Links */
 .external-links {
   display: flex;
-  gap: 8px;
+  gap: 5px;
 }
 
 .ext-link {
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 0.8rem;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 0.7rem;
   font-weight: 600;
   text-decoration: none;
   transition: all 0.2s;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .ext-link.prometheus {
@@ -390,5 +390,31 @@
 /* Current Time */
 .current-time {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: 0.75rem;
+}
+
+/* Compact status indicator (overview cards) */
+.si {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.si.healthy { background: var(--success); animation: pulse 2s infinite; }
+.si.warning { background: var(--warning); animation: pulse 2s infinite; }
+.si.critical { background: var(--danger); animation: pulse 2s infinite; }
+.si.offline { background: var(--text-muted); }
+
+/* Compact progress bar (overview cards) */
+.pbar {
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.pfill {
+  height: 100%;
+  border-radius: 2px;
 }

@@ -10,8 +10,27 @@ CORS(app)
 
 SERVERS_FILE = '/app/infra/assets/data/servers.json'
 ALERT_STATE_FILE = '/app/infra/api/alert_state.json'
+ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
 
-# Slack 설정 — 환경변수에서 로드
+
+def _load_env_file():
+    """api/.env 파일에서 환경변수 로드 (python-dotenv 없이)"""
+    if os.path.exists(ENV_FILE):
+        with open(ENV_FILE, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                if '=' in line:
+                    key, _, value = line.partition('=')
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    os.environ.setdefault(key, value)
+
+
+_load_env_file()
+
+# Slack 설정 — 환경변수에서 로드 (.env 또는 시스템 환경변수)
 SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN', '')
 SLACK_CHANNEL = os.environ.get('SLACK_CHANNEL', '')
 

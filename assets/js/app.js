@@ -52,9 +52,11 @@ function renderHeader() {
         <a href="/prometheus" target="_blank" class="ext-link prometheus">🔥 Prometheus</a>
         <a href="/grafana" target="_blank" class="ext-link grafana">📈 Grafana</a>
       </div>
-      <div class="status-badge">
-        <span class="status-dot"></span>
-        <span>System Operational</span>
+      <div class="header-stats">
+        <div class="header-stat" data-status="healthy"><span class="stat-dot ok"></span><span class="stat-count" style="color:var(--success);" id="headerOk">-</span><span class="stat-label">정상</span></div>
+        <div class="header-stat" data-status="warning"><span class="stat-dot warn"></span><span class="stat-count" style="color:var(--warning);" id="headerWarn">-</span><span class="stat-label">경고</span></div>
+        <div class="header-stat" data-status="critical"><span class="stat-dot crit"></span><span class="stat-count" style="color:var(--danger);" id="headerCrit">-</span><span class="stat-label">위험</span></div>
+        <div class="header-stat" data-status="offline"><span class="stat-dot off"></span><span class="stat-count" style="color:var(--text-muted);" id="headerOff">-</span><span class="stat-label">오프라인</span></div>
       </div>
       <div class="current-time" id="currentTime"></div>
     </div>

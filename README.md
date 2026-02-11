@@ -1,10 +1,8 @@
 # INFRA - Infrastructure Monitoring Dashboard
 
-실시간 인프라 모니터링 대시보드. 다수의 서버 메트릭, Kubernetes 클러스터 상태, CI/CD 파이프라인을 단일 화면에서 통합 모니터링합니다.
+실시간 인프라 모니터링 대시보드. 다수의 서버 메트릭을 단일 화면에서 통합 모니터링합니다.
 
 **Live**: https://infra.deok.kr
-
-![Dashboard Preview](docs/preview.png)
 
 ---
 
@@ -18,7 +16,8 @@
 | Monitoring | Prometheus, Node Exporter |
 | Visualization | Grafana |
 | Container | Kubernetes (K3s), kube-state-metrics |
-| Database | MariaDB |
+| Storage | MinIO, Longhorn |
+| Alerting | Slack Web API (Bot Token) |
 | Web Server | Nginx (리버스 프록시 + 정적 파일 서빙) |
 | OS | Rocky Linux 9 |
 
@@ -30,40 +29,59 @@
 infra/
 ├── index.html                    # SPA 진입점
 ├── api/
-│   └── server.py                 # Flask API (서버 설정 CRUD)
+│   ├── server.py                 # Flask API (서버 CRUD, Slack 알림)
+│   └── .env                      # 환경변수 (SLACK_BOT_TOKEN 등, git 미추적)
 ├── assets/
 │   ├── css/
 │   │   ├── variables.css         # CSS 변수, 다크 테마, 색상 정의
-│   │   ├── layout.css            # 그리드 레이아웃, 반응형
-│   │   └── components.css        # 카드, 버튼, 모달 등 UI 컴포넌트
+│   │   ├── layout.css            # 헤더, 툴바, 그리드, 스크롤 섹션 레이아웃
+│   │   └── components.css        # 카드, 버튼, 모달, 상태 표시기 등
 │   ├── js/
-│   │   ├── app.js                # 앱 초기화, 라우터 마운트
-│   │   ├── api.js                # 데이터 fetch (Prometheus, K8s, GitHub)
-│   │   ├── config.js             # 전역 설정 (URL, 갱신주기, 모니터링 대상)
+│   │   ├── app.js                # 앱 초기화, 헤더(인라인 상태 카운터), 라우터
+│   │   ├── api.js                # Prometheus 메트릭 fetch (CPU, MEM, Disk, MinIO, Longhorn)
+│   │   ├── config.js             # 전역 설정 (URL, 갱신주기)
 │   │   ├── router.js             # 해시 기반 SPA 라우터
 │   │   └── pages/
-│   │       ├── overview.js       # 서버 목록 + 상태 요약
-│   │       ├── detail.js         # 서버 상세 메트릭 (차트)
+│   │       ├── overview.js       # 서버 목록 (pinned+scroll, 뷰모드, 슬라이딩)
+│   │       ├── detail.js         # 서버 상세 (차트, 전체 디스크, MinIO/Longhorn)
 │   │       └── admin.js          # 서버 관리 (추가/수정/삭제)
 │   └── data/
 │       └── servers.json          # 서버 목록 및 임계치 설정
-└── docs/
-    └── preview.png
+└── preview-design.html           # 디자인 프리뷰 (개발용, 배포 불필요)
 ```
 
 ---
 
 ## 주요 기능
 
-**서버 모니터링** — CPU, Memory, Disk 사용률 실시간 조회. 임계치 기반 상태 판정 (정상/경고/위험/오프라인).
+### Overview (메인 화면)
+- 헤더에 인라인 상태 카운터 (정상/경고/위험/오프라인)
+- 툴바: 프로젝트 필터 + 뷰 모드 토글 (3열/5열)
+- **Pinned 섹션**: critical/warning 서버 고정 표시
+- **Scroll 섹션**: healthy/offline 서버 멀티행 자동 좌우 슬라이딩 (hover 시 정지)
+- 화면 높이에 맞게 행 수 자동 계산
+- 상태별 자동 정렬: critical > warning > healthy > offline
+- 헤더 상태 클릭 시 상태별 필터링 (토글)
 
-**서버 상세** — CPU·메모리 1시간 히스토리 차트, 네트워크 트래픽(In/Out), 디스크 I/O, Load Average 표시.
+### 서버 상세
+- CPU/Memory 1시간 히스토리 차트
+- 네트워크 트래픽(In/Out), 디스크 I/O, Load Average
+- 전체 파일시스템 디스크 사용량 (ext4/xfs/btrfs/vfat)
+- MinIO 클러스터 용량 + 버킷별 사용량 (메트릭 존재 시)
+- Longhorn 노드별 스토리지 + 볼륨 목록 (메트릭 존재 시)
 
-**Kubernetes 클러스터** — Pod 상태(Running/Pending/Failed), Node Ready 상태, 클러스터 통계.
+### 오프라인 감지
+- Prometheus `up` 메트릭으로 즉시 감지 (CPU staleness 5분 대기 없음)
 
-**CI/CD 파이프라인** — GitHub Actions 워크플로우 실행 현황. infra / salm / mgmt 3개 레포 통합 표시.
+### Slack 알림
+- 상태 변화 시 Slack 채널에 자동 알림
+- warning/critical 진입: 채널 메시지 전송 (중복 발송 차단)
+- healthy 복구: 이전 알림 스레드에 댓글로 복구 알림
+- `alert_state.json`으로 서버별 알림 상태 추적
 
-**서버 관리** — Admin 페이지에서 서버 추가/수정/삭제. Node Exporter 인스턴스 등록, 프로젝트 분류, 임계치 설정.
+### 서버 관리
+- Admin 페이지에서 서버 추가/수정/삭제
+- Node Exporter 인스턴스 등록, 프로젝트 분류, 개별 임계치 설정
 
 ---
 
@@ -71,20 +89,15 @@ infra/
 
 | 데이터 | 소스 | 갱신 주기 |
 |--------|------|----------|
-| 시스템 메트릭 (CPU, Memory, Disk) | Prometheus → Node Exporter | 10초 |
+| 시스템 메트릭 (CPU, Memory, Disk) | Prometheus > Node Exporter | 10초 |
 | 서비스 상태 | Prometheus `up` 메트릭 | 10초 |
-| Kubernetes 상태 | Prometheus → kube-state-metrics | 10초 |
-| CI/CD 워크플로우 | GitHub Actions API (Nginx 프록시) | 60초 |
+| Kubernetes 상태 | Prometheus > kube-state-metrics | 10초 |
+| MinIO 스토리지 | Prometheus > MinIO 메트릭 | 10초 |
+| Longhorn 스토리지 | Prometheus > Longhorn 메트릭 | 10초 |
 
 ---
 
-## 모니터링 대상
-
-**서버** — 총 10대 (메인서버 1, TEST 5, DATALAKE 4)
-
-**서비스** — Nginx, Prometheus, Grafana, Node Exporter, MariaDB, Kube State Metrics
-
-**임계치 기본값**
+## 임계치 기본값
 
 | 메트릭 | Warning | Critical |
 |--------|---------|----------|
@@ -105,13 +118,13 @@ Nginx 또는 정적 파일 서버로 프로젝트 루트를 서빙합니다. 빌
 python -m http.server 8080
 ```
 
-> Prometheus, GitHub API 프록시 등 실제 데이터 연동은 Nginx 설정이 필요합니다.
+> Prometheus, Grafana 프록시 등 실제 데이터 연동은 Nginx 설정이 필요합니다.
 
 ### Backend API
 
 ```bash
 cd api
-pip install flask flask-cors
+pip install flask flask-cors requests
 python server.py
 ```
 
@@ -119,16 +132,71 @@ python server.py
 
 ---
 
+## Slack 알림 설정
+
+### 1. Slack App 생성
+
+1. https://api.slack.com/apps > Create New App > From scratch
+2. OAuth & Permissions > Bot Token Scopes에 `chat:write`, `chat:write.public` 추가
+3. Install App > Bot User OAuth Token 복사 (`xoxb-...`)
+
+### 2. 환경변수 설정
+
+`api/.env` 파일 생성:
+
+```env
+SLACK_BOT_TOKEN=xoxb-여기에-토큰-값
+SLACK_CHANNEL=C091Z6DBT16
+```
+
+> `.env` 파일은 `.gitignore`에 포함되어 git에 추적되지 않습니다.
+> server.py가 시작 시 자동으로 `api/.env`를 로드합니다 (python-dotenv 불필요).
+
+### 3. 동작 흐름
+
+```
+서버 정상 → warning/critical 진입
+  → Slack 채널에 메시지 전송 (ts 저장, 중복 차단)
+
+서버 warning/critical → healthy 복구
+  → 이전 메시지 스레드에 복구 댓글
+  → alert_state에서 해당 서버 삭제
+```
+
+### 4. 테스트
+
+```bash
+# 경고 알림 테스트
+curl -X POST http://localhost:5000/api/alert \
+  -H "Content-Type: application/json" \
+  -d '{"serverId":"test-01","serverName":"테스트서버","status":"warning"}'
+
+# 복구 알림 테스트 (이전 경고의 스레드에 댓글)
+curl -X POST http://localhost:5000/api/alert \
+  -H "Content-Type: application/json" \
+  -d '{"serverId":"test-01","serverName":"테스트서버","status":"healthy"}'
+```
+
+---
+
 ## Nginx 설정 (참고)
 
 ```nginx
-# GitHub API 프록시 (토큰 서버사이드 주입)
-location /api/github/ {
-    proxy_pass https://api.github.com/;
-    proxy_set_header Authorization "token ${GITHUB_TOKEN}";
-    proxy_set_header Accept "application/vnd.github.v3+json";
-    proxy_set_header User-Agent "infra-dashboard";
-    proxy_ssl_server_name on;
+# Flask API 프록시
+location /api/ {
+    proxy_pass http://127.0.0.1:5000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+
+# Prometheus 프록시
+location /prometheus/ {
+    proxy_pass http://localhost:9090/;
+}
+
+# Grafana 프록시
+location /grafana/ {
+    proxy_pass http://localhost:3000/;
 }
 ```
 
