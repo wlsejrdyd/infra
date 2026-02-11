@@ -3,6 +3,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import json
 import os
+import threading
 import requests as http_requests
 
 app = Flask(__name__)
@@ -12,6 +13,9 @@ SERVERS_FILE = '/app/infra/assets/data/servers.json'
 ALERT_STATE_FILE = '/app/infra/api/alert_state.json'
 ALERT_CONFIG_FILE = '/app/infra/api/alert_config.json'
 ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+
+# 동시 알림 요청 시 중복 발송 방지 lock
+_alert_lock = threading.Lock()
 
 
 def _load_env_file():
@@ -175,35 +179,37 @@ def handle_alert():
     if not server_id or not status:
         return jsonify({'error': 'serverId and status are required'}), 400
 
-    state = _load_alert_state()
+    # lock으로 동시 요청 시 중복 발송 방지
+    with _alert_lock:
+        state = _load_alert_state()
 
-    if status in ('warning', 'critical'):
-        # 이미 알림 발송된 서버면 중복 발송 안 함
-        if server_id in state:
-            return jsonify({'skipped': True, 'message': 'Alert already sent'}), 200
+        if status in ('warning', 'critical'):
+            # 이미 알림 발송된 서버면 중복 발송 안 함
+            if server_id in state:
+                return jsonify({'skipped': True, 'message': 'Alert already sent'}), 200
 
-        emoji = '⚠️' if status == 'warning' else '🔴'
-        label = 'Warning' if status == 'warning' else 'Critical'
-        text = f"{emoji} *[{label}] {server_name}* (`{server_id}`)\n상태가 {label}로 변경되었습니다."
+            emoji = '⚠️' if status == 'warning' else '🔴'
+            label = 'Warning' if status == 'warning' else 'Critical'
+            text = f"{emoji} *[{label}] {server_name}* (`{server_id}`)\n상태가 {label}로 변경되었습니다."
 
-        ts = _slack_post_message(SLACK_CHANNEL, text)
-        if ts:
-            state[server_id] = {'ts': ts, 'status': status}
-            _save_alert_state(state)
-            return jsonify({'sent': True, 'ts': ts}), 200
-        else:
-            return jsonify({'error': 'Failed to send Slack message'}), 500
+            ts = _slack_post_message(SLACK_CHANNEL, text)
+            if ts:
+                state[server_id] = {'ts': ts, 'status': status}
+                _save_alert_state(state)
+                return jsonify({'sent': True, 'ts': ts}), 200
+            else:
+                return jsonify({'error': 'Failed to send Slack message'}), 500
 
-    elif status == 'healthy':
-        # 이전 알림이 있으면 스레드 댓글로 복구 알림
-        if server_id in state:
-            thread_ts = state[server_id]['ts']
-            text = f"✅ *[Recovered] {server_name}* (`{server_id}`)\n정상 범위로 복구되었습니다."
-            _slack_reply(SLACK_CHANNEL, thread_ts, text)
-            del state[server_id]
-            _save_alert_state(state)
-            return jsonify({'recovered': True}), 200
-        return jsonify({'skipped': True, 'message': 'No prior alert'}), 200
+        elif status == 'healthy':
+            # 이전 알림이 있으면 스레드 댓글로 복구 알림
+            if server_id in state:
+                thread_ts = state[server_id]['ts']
+                text = f"✅ *[Recovered] {server_name}* (`{server_id}`)\n정상 범위로 복구되었습니다."
+                _slack_reply(SLACK_CHANNEL, thread_ts, text)
+                del state[server_id]
+                _save_alert_state(state)
+                return jsonify({'recovered': True}), 200
+            return jsonify({'skipped': True, 'message': 'No prior alert'}), 200
 
     return jsonify({'skipped': True}), 200
 

@@ -468,14 +468,20 @@ function renderServerGrid() {
     const cards = scrolling.map(s => renderCompactCard(s)).join('');
     track.innerHTML = cards;
 
-    // 슬라이딩 필요 여부 확인
-    requestAnimationFrame(() => {
-      if (track.scrollWidth > container.clientWidth) {
-        track.innerHTML = cards + cards;
-        contentDuplicated = true;
-        startSliding();
-      }
-    });
+    // 슬라이딩 필요 여부: 카드 열 수 기반으로 정확히 계산
+    const colCount = Math.ceil(scrolling.length / currentRows);
+    const contentW = colCount * cardStyle.width + (colCount - 1) * dg;
+    const containerW = container.clientWidth;
+
+    if (contentW > containerW) {
+      // 원본이 화면을 채우므로 1벌 복제로 무한 루프 가능
+      track.innerHTML = cards + cards;
+      contentDuplicated = true;
+      startSliding();
+    } else {
+      // 카드가 화면에 다 들어감 → 복제/슬라이딩 불필요
+      contentDuplicated = false;
+    }
   });
 }
 
