@@ -355,10 +355,10 @@ async function updateServerGrid() {
       console.log(`[상태변화] ${server.name}: ${prev || '(초기)'} → ${curr}`);
     }
     if (isNewAlert || isRecovery) {
-      console.log(`[알림발송] ${server.name}: ${curr} (알림 ${alertEnabled ? 'ON' : 'OFF'})`);
+      console.log(`[알림발송] ${server.name}: ${curr} (Slack ${alertEnabled ? 'ON' : 'OFF'})`);
+      playAlertSound();
+      showBrowserNotification(server.name, curr);
       if (alertEnabled) {
-        playAlertSound();
-        showBrowserNotification(server.name, curr);
         sendAlertToBackend(server.id, server.name, curr);
       }
     }
