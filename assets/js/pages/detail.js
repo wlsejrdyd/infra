@@ -1,12 +1,15 @@
 // assets/js/pages/detail.js
-import { 
-  fetchServerMetrics, 
-  fetchCpuHistory, 
+import {
+  fetchServerMetrics,
+  fetchCpuHistory,
   fetchMemoryHistory,
   fetchNetworkTraffic,
   fetchDiskIO,
   fetchLoadAverage,
-  fetchServersData 
+  fetchAllDisks,
+  fetchMinioCapacity,
+  fetchLonghornCapacity,
+  fetchServersData
 } from '/assets/js/api.js';
 import { router } from '/assets/js/router.js';
 
@@ -157,6 +160,17 @@ export async function renderDetail(params) {
         </div>
       </div>
 
+      <!-- All Disks -->
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-header">
+          <span class="card-title">DISK USAGE (ALL FILESYSTEMS)</span>
+          <span class="card-icon" style="color: var(--color-purple);">💾</span>
+        </div>
+        <div id="allDisksContainer" style="padding: 1rem 0;">
+          <div style="color: var(--text-muted); font-size: 0.9rem;">디스크 정보를 불러오는 중...</div>
+        </div>
+      </div>
+
       <!-- Load Average -->
       <div class="card">
         <div class="card-header">
@@ -175,6 +189,27 @@ export async function renderDetail(params) {
           <div style="text-align: center;">
             <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;">15분</div>
             <div id="load15" style="font-size: 1.5rem; font-weight: 600;">--</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Storage (MinIO / Longhorn) — 메트릭 존재 시에만 표시 -->
+      <div id="storageSection" style="display: none; margin-top: 1.5rem;">
+        <div class="grid-2">
+          <div class="card" id="minioCard" style="display: none;">
+            <div class="card-header">
+              <span class="card-title">MINIO STORAGE</span>
+              <span class="card-icon">🪣</span>
+            </div>
+            <div id="minioContent" style="padding: 1rem 0;"></div>
+          </div>
+
+          <div class="card" id="longhornCard" style="display: none;">
+            <div class="card-header">
+              <span class="card-title">LONGHORN STORAGE</span>
+              <span class="card-icon">🐂</span>
+            </div>
+            <div id="longhornContent" style="padding: 1rem 0;"></div>
           </div>
         </div>
       </div>
@@ -248,6 +283,108 @@ async function updateServerData(server) {
   }
   if (loadAvg.load15 !== null) {
     document.getElementById('load15').textContent = loadAvg.load15.toFixed(2);
+  }
+
+  // MinIO / Longhorn 스토리지
+  const minio = await fetchMinioCapacity();
+  const longhorn = await fetchLonghornCapacity();
+  let showStorage = false;
+
+  if (minio.total !== null) {
+    showStorage = true;
+    const minioCard = document.getElementById('minioCard');
+    const minioContent = document.getElementById('minioContent');
+    if (minioCard && minioContent) {
+      minioCard.style.display = '';
+      const pct = minio.usagePercent.toFixed(1);
+      const color = minio.usagePercent >= 90 ? 'var(--danger)' : minio.usagePercent >= 80 ? 'var(--warning)' : 'var(--success)';
+      let html = `
+        <div style="margin-bottom: 1rem;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.35rem;">
+            <span style="font-size: 0.9rem;">Cluster</span>
+            <span style="font-weight: 600; color: ${color};">${pct}% (${formatBytes(minio.used)} / ${formatBytes(minio.total)})</span>
+          </div>
+          <div class="progress-bar" style="height: 6px;">
+            <div class="progress-fill" style="width: ${pct}%; background: ${color};"></div>
+          </div>
+        </div>
+      `;
+      if (minio.buckets.length > 0) {
+        html += `<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Buckets</div>`;
+        minio.buckets.forEach(b => {
+          html += `<div style="display: flex; justify-content: space-between; font-size: 0.85rem; padding: 0.25rem 0;">
+            <span>${b.name}</span><span style="color: var(--text-muted);">${formatBytes(b.size)}</span>
+          </div>`;
+        });
+      }
+      minioContent.innerHTML = html;
+    }
+  }
+
+  if (longhorn.nodes.length > 0) {
+    showStorage = true;
+    const lhCard = document.getElementById('longhornCard');
+    const lhContent = document.getElementById('longhornContent');
+    if (lhCard && lhContent) {
+      lhCard.style.display = '';
+      let html = '';
+      longhorn.nodes.forEach(node => {
+        const pct = node.usagePercent.toFixed(1);
+        const color = node.usagePercent >= 90 ? 'var(--danger)' : node.usagePercent >= 80 ? 'var(--warning)' : 'var(--success)';
+        html += `
+          <div style="margin-bottom: 0.75rem;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.35rem;">
+              <span style="font-size: 0.85rem;">${node.name}</span>
+              <span style="font-size: 0.85rem; font-weight: 600; color: ${color};">${pct}% (${formatBytes(node.used)} / ${formatBytes(node.capacity)})</span>
+            </div>
+            <div class="progress-bar" style="height: 6px;">
+              <div class="progress-fill" style="width: ${pct}%; background: ${color};"></div>
+            </div>
+          </div>
+        `;
+      });
+      if (longhorn.volumes.length > 0) {
+        html += `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.75rem; margin-bottom: 0.5rem;">Volumes</div>`;
+        longhorn.volumes.forEach(v => {
+          html += `<div style="display: flex; justify-content: space-between; font-size: 0.85rem; padding: 0.25rem 0;">
+            <span>${v.name}</span><span style="color: var(--text-muted);">${formatBytes(v.size)}</span>
+          </div>`;
+        });
+      }
+      lhContent.innerHTML = html;
+    }
+  }
+
+  const storageSection = document.getElementById('storageSection');
+  if (storageSection && showStorage) {
+    storageSection.style.display = '';
+  }
+
+  // 전체 디스크 표시
+  const allDisks = await fetchAllDisks(server.instance);
+  const disksContainer = document.getElementById('allDisksContainer');
+  if (disksContainer && allDisks.length > 0) {
+    disksContainer.innerHTML = allDisks
+      .sort((a, b) => a.mountpoint.localeCompare(b.mountpoint))
+      .map(disk => {
+        const usedStr = formatBytes(disk.used);
+        const totalStr = formatBytes(disk.total);
+        const pct = disk.usagePercent.toFixed(1);
+        const color = disk.usagePercent >= 90 ? 'var(--danger)' : disk.usagePercent >= 80 ? 'var(--warning)' : 'var(--success)';
+        return `
+          <div style="margin-bottom: 0.75rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+              <span style="font-size: 0.85rem; color: var(--text-primary);">${disk.mountpoint} <span style="color: var(--text-muted); font-size: 0.75rem;">(${disk.fstype})</span></span>
+              <span style="font-size: 0.85rem; font-weight: 600; color: ${color};">${pct}% <span style="color: var(--text-muted); font-weight: 400;">(${usedStr} / ${totalStr})</span></span>
+            </div>
+            <div class="progress-bar" style="height: 6px;">
+              <div class="progress-fill" style="width: ${pct}%; background: ${color};"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+  } else if (disksContainer) {
+    disksContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem;">디스크 정보 없음</div>';
   }
 
   // 차트 생성 (첫 실행 시에만)

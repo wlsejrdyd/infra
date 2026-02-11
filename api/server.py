@@ -3,11 +3,17 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import json
 import os
+import requests as http_requests
 
 app = Flask(__name__)
 CORS(app)
 
 SERVERS_FILE = '/app/infra/assets/data/servers.json'
+ALERT_STATE_FILE = '/app/infra/api/alert_state.json'
+
+# Slack 설정 — 환경변수에서 로드
+SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN', '')
+SLACK_CHANNEL = os.environ.get('SLACK_CHANNEL', '')
 
 @app.route('/api/servers', methods=['GET'])
 def get_servers():
@@ -41,6 +47,109 @@ def save_servers():
 def health():
     """헬스체크"""
     return jsonify({'status': 'ok'}), 200
+
+
+# ──────────────────────────────────
+# Slack 알림 API
+# ──────────────────────────────────
+
+def _load_alert_state():
+    """알림 상태 파일 로드 (서버별 마지막 알림 ts 저장)"""
+    if os.path.exists(ALERT_STATE_FILE):
+        with open(ALERT_STATE_FILE, 'r') as f:
+            return json.load(f)
+    return {}
+
+
+def _save_alert_state(state):
+    with open(ALERT_STATE_FILE, 'w') as f:
+        json.dump(state, f, indent=2)
+
+
+def _slack_post_message(channel, text):
+    """Slack 채널에 메시지 전송, ts 반환"""
+    res = http_requests.post('https://slack.com/api/chat.postMessage', json={
+        'channel': channel,
+        'text': text,
+    }, headers={
+        'Authorization': f'Bearer {SLACK_BOT_TOKEN}',
+        'Content-Type': 'application/json'
+    })
+    data = res.json()
+    if data.get('ok'):
+        return data.get('ts')
+    else:
+        app.logger.error(f"Slack postMessage failed: {data.get('error')}")
+        return None
+
+
+def _slack_reply(channel, thread_ts, text):
+    """Slack 스레드에 댓글 전송"""
+    res = http_requests.post('https://slack.com/api/chat.postMessage', json={
+        'channel': channel,
+        'thread_ts': thread_ts,
+        'text': text,
+    }, headers={
+        'Authorization': f'Bearer {SLACK_BOT_TOKEN}',
+        'Content-Type': 'application/json'
+    })
+    data = res.json()
+    if not data.get('ok'):
+        app.logger.error(f"Slack reply failed: {data.get('error')}")
+
+
+@app.route('/api/alert', methods=['POST'])
+def handle_alert():
+    """
+    프론트엔드에서 상태 변화 시 호출.
+    Body: { "serverId": "xxx", "serverName": "xxx", "status": "warning|critical|healthy|offline" }
+
+    - warning/critical: 알림 메시지 발송 (1회), ts 저장
+    - healthy: 이전 알림이 있으면 스레드 댓글로 복구 알림, ts 삭제
+    """
+    if not SLACK_BOT_TOKEN or not SLACK_CHANNEL:
+        return jsonify({'error': 'Slack not configured'}), 503
+
+    body = request.get_json()
+    server_id = body.get('serverId')
+    server_name = body.get('serverName', server_id)
+    status = body.get('status')
+
+    if not server_id or not status:
+        return jsonify({'error': 'serverId and status are required'}), 400
+
+    state = _load_alert_state()
+
+    if status in ('warning', 'critical'):
+        # 이미 알림 발송된 서버면 중복 발송 안 함
+        if server_id in state:
+            return jsonify({'skipped': True, 'message': 'Alert already sent'}), 200
+
+        emoji = '⚠️' if status == 'warning' else '🔴'
+        label = 'Warning' if status == 'warning' else 'Critical'
+        text = f"{emoji} *[{label}] {server_name}* (`{server_id}`)\n상태가 {label}로 변경되었습니다."
+
+        ts = _slack_post_message(SLACK_CHANNEL, text)
+        if ts:
+            state[server_id] = {'ts': ts, 'status': status}
+            _save_alert_state(state)
+            return jsonify({'sent': True, 'ts': ts}), 200
+        else:
+            return jsonify({'error': 'Failed to send Slack message'}), 500
+
+    elif status == 'healthy':
+        # 이전 알림이 있으면 스레드 댓글로 복구 알림
+        if server_id in state:
+            thread_ts = state[server_id]['ts']
+            text = f"✅ *[Recovered] {server_name}* (`{server_id}`)\n정상 범위로 복구되었습니다."
+            _slack_reply(SLACK_CHANNEL, thread_ts, text)
+            del state[server_id]
+            _save_alert_state(state)
+            return jsonify({'recovered': True}), 200
+        return jsonify({'skipped': True, 'message': 'No prior alert'}), 200
+
+    return jsonify({'skipped': True}), 200
+
 
 if __name__ == '__main__':
     # 개발 환경: 디버그 모드

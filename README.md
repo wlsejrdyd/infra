@@ -1,124 +1,128 @@
-# 📊 INFRA - Infrastructure Monitoring Dashboard
+# INFRA - Infrastructure Monitoring Dashboard
 
-> 실시간 인프라 모니터링 + CI/CD 파이프라인 + 백업 상태 통합 대시보드
+실시간 인프라 모니터링 대시보드. 다수의 서버 메트릭, Kubernetes 클러스터 상태, CI/CD 파이프라인을 단일 화면에서 통합 모니터링합니다.
 
-[![Deploy](https://github.com/wlsejrdyd/infra/actions/workflows/deploy.yml/badge.svg)](https://github.com/wlsejrdyd/infra/actions/workflows/deploy.yml)
-[![Ansible](https://github.com/wlsejrdyd/infra/actions/workflows/ansible.yml/badge.svg)](https://github.com/wlsejrdyd/infra/actions/workflows/ansible.yml)
+**Live**: https://infra.deok.kr
 
-## 🌐 Live
-
-- **Dashboard**: https://infra.deok.kr
-- **Prometheus**: https://infra.deok.kr/prometheus
-- **Grafana**: https://infra.deok.kr/grafana
+![Dashboard Preview](docs/preview.png)
 
 ---
 
-## ✨ 주요 기능
-
-### 📈 시스템 메트릭
-- CPU, Memory, Disk 사용률 실시간 모니터링
-- Uptime 표시
-- CPU 사용률 1시간 히스토리 차트
-
-### 🔌 서비스 상태
-- Nginx, Prometheus, Grafana, Node Exporter, MariaDB 상태
-- Prometheus `up` 메트릭 기반 자동 체크
-
-### ☸️ Kubernetes 클러스터
-- Pod 상태 (Running/Pending/Failed)
-- Node Ready 상태
-- Cluster Overview 통계
-
-### 🚀 CI/CD Pipeline
-- GitHub Actions 멀티 repo 통합 표시
-- **infra** / **salm** / **mgmt** 필터링
-- 실시간 배포 현황 확인
-
-### 🔧 Ansible Execution
-- 서비스 상태 체크 결과
-- 포트 도달 가능 여부
-- OK/Changed/Failed/Skipped 통계
-
-### 💾 Backup Status
-- SALM / Mgmt / Database 백업 현황
-- 최근 백업 파일 목록 + 용량
-- Success/Failed 통계
-
----
-
-## 🛠️ Tech Stack
+## 기술 스택
 
 | 영역 | 기술 |
 |------|------|
-| **Frontend** | HTML5, CSS3, Vanilla JavaScript |
-| **Charts** | Chart.js |
-| **Monitoring** | Prometheus, Grafana, Node Exporter |
-| **Container** | Kubernetes (kube-state-metrics) |
-| **Automation** | Ansible |
-| **CI/CD** | GitHub Actions |
-| **Server** | Nginx, Rocky Linux 9 |
+| Frontend | HTML5, CSS3, Vanilla JavaScript (ES6 Modules) |
+| Charts | Chart.js 3.9.1 (CDN) |
+| Backend API | Python Flask, Flask-CORS |
+| Monitoring | Prometheus, Node Exporter |
+| Visualization | Grafana |
+| Container | Kubernetes (K3s), kube-state-metrics |
+| Database | MariaDB |
+| Web Server | Nginx (리버스 프록시 + 정적 파일 서빙) |
+| OS | Rocky Linux 9 |
 
 ---
 
-## 📁 프로젝트 구조
+## 프로젝트 구조
 
 ```
 infra/
-├── index.html           # 메인 대시보드
-├── ansible/
-│   ├── inventory/       # 인벤토리
-│   ├── playbooks/
-│   │   ├── site.yml     # 서비스 상태 체크
-│   │   └── backup.yml   # 백업 실행
-│   └── roles/           # Ansible 역할
-├── reports/             # Ansible 리포트 (JSON)
-│   ├── report_*.json    # 서비스 체크 결과
-│   └── backup_status.json # 백업 상태
-├── docs/                # 문서
-└── .github/workflows/   # CI/CD
-    ├── deploy.yml       # 대시보드 배포
-    └── ansible.yml      # Ansible 실행
+├── index.html                    # SPA 진입점
+├── api/
+│   └── server.py                 # Flask API (서버 설정 CRUD)
+├── assets/
+│   ├── css/
+│   │   ├── variables.css         # CSS 변수, 다크 테마, 색상 정의
+│   │   ├── layout.css            # 그리드 레이아웃, 반응형
+│   │   └── components.css        # 카드, 버튼, 모달 등 UI 컴포넌트
+│   ├── js/
+│   │   ├── app.js                # 앱 초기화, 라우터 마운트
+│   │   ├── api.js                # 데이터 fetch (Prometheus, K8s, GitHub)
+│   │   ├── config.js             # 전역 설정 (URL, 갱신주기, 모니터링 대상)
+│   │   ├── router.js             # 해시 기반 SPA 라우터
+│   │   └── pages/
+│   │       ├── overview.js       # 서버 목록 + 상태 요약
+│   │       ├── detail.js         # 서버 상세 메트릭 (차트)
+│   │       └── admin.js          # 서버 관리 (추가/수정/삭제)
+│   └── data/
+│       └── servers.json          # 서버 목록 및 임계치 설정
+└── docs/
+    └── preview.png
 ```
 
 ---
 
-## 📊 데이터 소스
+## 주요 기능
+
+**서버 모니터링** — CPU, Memory, Disk 사용률 실시간 조회. 임계치 기반 상태 판정 (정상/경고/위험/오프라인).
+
+**서버 상세** — CPU·메모리 1시간 히스토리 차트, 네트워크 트래픽(In/Out), 디스크 I/O, Load Average 표시.
+
+**Kubernetes 클러스터** — Pod 상태(Running/Pending/Failed), Node Ready 상태, 클러스터 통계.
+
+**CI/CD 파이프라인** — GitHub Actions 워크플로우 실행 현황. infra / salm / mgmt 3개 레포 통합 표시.
+
+**서버 관리** — Admin 페이지에서 서버 추가/수정/삭제. Node Exporter 인스턴스 등록, 프로젝트 분류, 임계치 설정.
+
+---
+
+## 데이터 소스
 
 | 데이터 | 소스 | 갱신 주기 |
 |--------|------|----------|
-| 시스템 메트릭 | Prometheus API | 10초 |
+| 시스템 메트릭 (CPU, Memory, Disk) | Prometheus → Node Exporter | 10초 |
 | 서비스 상태 | Prometheus `up` 메트릭 | 10초 |
-| K8s 상태 | kube-state-metrics | 10초 |
-| CI/CD | GitHub Actions API | 1분 |
-| Ansible | `/reports/*.json` | 1분 |
-| 백업 | `/reports/backup_status.json` | 1분 |
+| Kubernetes 상태 | Prometheus → kube-state-metrics | 10초 |
+| CI/CD 워크플로우 | GitHub Actions API (Nginx 프록시) | 60초 |
 
 ---
 
-## 🚀 배포
+## 모니터링 대상
 
-### 자동 배포 (GitHub Actions)
-`main` 브랜치 push 시:
-1. SSH로 서버 접속
-2. Git pull
-3. Nginx reload
+**서버** — 총 10대 (메인서버 1, TEST 5, DATALAKE 4)
 
-### Ansible 자동 실행
-- GitHub Actions에서 주기적 실행
-- 서비스 상태 체크 → JSON 리포트 생성
+**서비스** — Nginx, Prometheus, Grafana, Node Exporter, MariaDB, Kube State Metrics
 
-### 백업 Cron
+**임계치 기본값**
+
+| 메트릭 | Warning | Critical |
+|--------|---------|----------|
+| CPU | 70% | 80% |
+| Memory | 70% | 80% |
+| Disk | 80% | 90% |
+
+---
+
+## 실행 방법
+
+### Frontend
+
+Nginx 또는 정적 파일 서버로 프로젝트 루트를 서빙합니다. 빌드 과정 없이 바로 동작합니다.
+
 ```bash
-# 매일 새벽 3시 백업
-0 3 * * * cd /app/infra/ansible && ansible-playbook playbooks/backup.yml
+# 로컬 개발 시
+python -m http.server 8080
 ```
 
+> Prometheus, GitHub API 프록시 등 실제 데이터 연동은 Nginx 설정이 필요합니다.
+
+### Backend API
+
+```bash
+cd api
+pip install flask flask-cors
+python server.py
+```
+
+개발 모드로 `localhost:5000`에서 실행됩니다. 프로덕션에서는 gunicorn을 사용합니다.
+
 ---
 
-## ⚙️ 설정
+## Nginx 설정 (참고)
 
-### Nginx Proxy (GitHub API)
 ```nginx
+# GitHub API 프록시 (토큰 서버사이드 주입)
 location /api/github/ {
     proxy_pass https://api.github.com/;
     proxy_set_header Authorization "token ${GITHUB_TOKEN}";
@@ -128,23 +132,9 @@ location /api/github/ {
 }
 ```
 
-### GitHub Actions Secrets
-| Secret | 설명 |
-|--------|------|
-| `SERVER_HOST` | 서버 IP/도메인 |
-| `SERVER_USER` | SSH 사용자 |
-| `SSH_PRIVATE_KEY` | SSH 개인키 |
-| `SERVER_PORT` | SSH 포트 |
-
 ---
 
-## 📸 Preview
-
-![Dashboard Preview](docs/preview.png)
-
----
-
-## 👤 Author
+## Author
 
 - GitHub: [@wlsejrdyd](https://github.com/wlsejrdyd)
 - Email: wlsejrdyd@gmail.com

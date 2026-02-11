@@ -4,7 +4,9 @@ import { router } from '/assets/js/router.js';
 
 let serversData = { servers: [], defaultThresholds: {} };
 let currentFilter = 'all';
+let currentStatusFilter = 'all';
 let updateInterval = null;
+let previousStatusMap = {};  // 상태 변화 감지용
 
 /**
  * Overview 페이지 렌더링
@@ -38,9 +40,9 @@ export async function renderOverview() {
         </div>
       </div>
 
-      <!-- Stats Cards -->
+      <!-- Stats Cards (클릭하여 상태별 필터링) -->
       <div class="grid-4" id="statsCards">
-        <div class="card">
+        <div class="card stats-card" data-status="healthy" style="cursor: pointer; transition: outline 0.2s;">
           <div class="card-header">
             <span class="card-title">정상 서버</span>
             <div style="font-size: 1.5rem;">✅</div>
@@ -48,8 +50,8 @@ export async function renderOverview() {
           <div class="metric-value" style="color: var(--success);" id="healthyCount">-</div>
           <div class="metric-sub">정상 동작 중</div>
         </div>
-        
-        <div class="card">
+
+        <div class="card stats-card" data-status="warning" style="cursor: pointer; transition: outline 0.2s;">
           <div class="card-header">
             <span class="card-title">경고 상태</span>
             <div style="font-size: 1.5rem;">⚠️</div>
@@ -57,8 +59,8 @@ export async function renderOverview() {
           <div class="metric-value" style="color: var(--warning);" id="warningCount">-</div>
           <div class="metric-sub">임계치 근접</div>
         </div>
-        
-        <div class="card">
+
+        <div class="card stats-card" data-status="critical" style="cursor: pointer; transition: outline 0.2s;">
           <div class="card-header">
             <span class="card-title">위험 상태</span>
             <div style="font-size: 1.5rem;">🔴</div>
@@ -66,8 +68,8 @@ export async function renderOverview() {
           <div class="metric-value" style="color: var(--danger);" id="criticalCount">-</div>
           <div class="metric-sub">즉시 확인 필요</div>
         </div>
-        
-        <div class="card">
+
+        <div class="card stats-card" data-status="offline" style="cursor: pointer; transition: outline 0.2s;">
           <div class="card-header">
             <span class="card-title">오프라인</span>
             <div style="font-size: 1.5rem;">💤</div>
@@ -94,12 +96,29 @@ export async function renderOverview() {
     </div>
   `;
 
-  // 필터 버튼 이벤트
+  // 프로젝트 필터 버튼 이벤트
   document.querySelectorAll('.project-filter-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.project-filter-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentFilter = btn.dataset.project;
+      renderServerGrid();
+    });
+  });
+
+  // 상태 카드 클릭 이벤트 (토글 방식: 다시 클릭하면 전체 보기)
+  document.querySelectorAll('.stats-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const status = card.dataset.status;
+      if (currentStatusFilter === status) {
+        currentStatusFilter = 'all';
+      } else {
+        currentStatusFilter = status;
+      }
+      // 활성 카드 하이라이트
+      document.querySelectorAll('.stats-card').forEach(c => {
+        c.style.outline = c.dataset.status === currentStatusFilter ? '2px solid var(--accent)' : 'none';
+      });
       renderServerGrid();
     });
   });
@@ -128,6 +147,20 @@ async function updateServerGrid() {
     stats[status]++;
   }
 
+  // 상태 변화 감지 → Slack 알림
+  for (const server of serversData.servers) {
+    const prevStatus = previousStatusMap[server.id];
+    const currStatus = server._status;
+
+    if (prevStatus && prevStatus !== currStatus) {
+      // warning/critical 진입 시 알림, healthy 복구 시 댓글
+      if (currStatus === 'warning' || currStatus === 'critical' || currStatus === 'healthy') {
+        sendAlertToBackend(server.id, server.name, currStatus);
+      }
+    }
+    previousStatusMap[server.id] = currStatus;
+  }
+
   // 통계 카드 업데이트
   document.getElementById('healthyCount').textContent = stats.healthy;
   document.getElementById('warningCount').textContent = stats.warning;
@@ -144,10 +177,20 @@ async function updateServerGrid() {
 function renderServerGrid() {
   const grid = document.getElementById('serverGrid');
   
-  // 필터링
-  const filteredServers = currentFilter === 'all' 
-    ? serversData.servers 
-    : serversData.servers.filter(s => s.project === currentFilter);
+  // 프로젝트 필터 + 상태 필터 동시 적용
+  let filteredServers = serversData.servers.filter(s => {
+    const projectMatch = currentFilter === 'all' || s.project === currentFilter;
+    const statusMatch = currentStatusFilter === 'all' || s._status === currentStatusFilter;
+    return projectMatch && statusMatch;
+  });
+
+  // 상태별 자동 정렬: critical → warning → healthy → offline
+  const statusOrder = { critical: 0, warning: 1, healthy: 2, offline: 3 };
+  filteredServers.sort((a, b) => {
+    const orderA = statusOrder[a._status] ?? 4;
+    const orderB = statusOrder[b._status] ?? 4;
+    return orderA - orderB;
+  });
 
   if (filteredServers.length === 0) {
     grid.innerHTML = `
@@ -265,6 +308,21 @@ function startAutoUpdate() {
   updateInterval = setInterval(() => {
     updateServerGrid();
   }, 10000); // 10초마다 업데이트
+}
+
+/**
+ * Slack 알림 전송 (백엔드 경유)
+ */
+async function sendAlertToBackend(serverId, serverName, status) {
+  try {
+    await fetch('/api/alert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ serverId, serverName, status })
+    });
+  } catch (e) {
+    console.error('Failed to send alert:', e);
+  }
 }
 
 /**

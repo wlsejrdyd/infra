@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INFRA Dashboard - Design Preview (v4)</title>
+<style>
+  :root {
+    --bg-primary: #0a0e17;
+    --bg-secondary: #111827;
+    --bg-card: #1f2937;
+    --accent: #3b82f6;
+    --accent-glow: rgba(59, 130, 246, 0.3);
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --text: #f9fafb;
+    --text-muted: #9ca3af;
+    --border: #374151;
+    --prometheus: #e6522c;
+    --grafana: #f46800;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 0.6rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+  .logo-icon {
+    width: 34px; height: 34px;
+    background: linear-gradient(135deg, var(--accent), #8b5cf6);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem;
+  }
+  .logo-text { font-size: 1.1rem; font-weight: 700; }
+  .header-right { display: flex; align-items: center; gap: 0.75rem; }
+  .ext-link {
+    padding: 5px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 600;
+    text-decoration: none; display: flex; align-items: center; gap: 4px;
+  }
+  .ext-link.prometheus { background: rgba(230,82,44,0.15); border: 1px solid var(--prometheus); color: var(--prometheus); }
+  .ext-link.grafana { background: rgba(244,104,0,0.15); border: 1px solid var(--grafana); color: var(--grafana); }
+  .header-stats {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0 0.6rem;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+  .header-stat {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 0.75rem; cursor: pointer;
+    padding: 3px 6px; border-radius: 5px; transition: background 0.2s;
+  }
+  .header-stat:hover { background: rgba(255,255,255,0.05); }
+  .header-stat .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .header-stat .dot.ok { background: var(--success); }
+  .header-stat .dot.warn { background: var(--warning); }
+  .header-stat .dot.crit { background: var(--danger); }
+  .header-stat .dot.off { background: var(--text-muted); }
+  .header-stat .count { font-weight: 700; }
+  .header-stat .label { color: var(--text-muted); font-weight: 400; }
+  .current-time { color: var(--text-muted); font-size: 0.75rem; }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.5rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+  }
+  .filter-group { display: flex; gap: 4px; }
+  .filter-btn {
+    padding: 4px 10px; border-radius: 5px; font-size: 0.72rem; font-weight: 600;
+    background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+    cursor: pointer; transition: all 0.2s;
+  }
+  .filter-btn:hover { border-color: var(--accent); color: var(--text); }
+  .filter-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+  .view-toggle { display: flex; gap: 2px; background: var(--bg-primary); border-radius: 6px; padding: 2px; }
+  .view-btn {
+    padding: 4px 10px; border-radius: 4px; font-size: 0.68rem; font-weight: 600;
+    background: transparent; border: none; color: var(--text-muted);
+    cursor: pointer; transition: all 0.2s;
+  }
+  .view-btn:hover { color: var(--text); }
+  .view-btn.active { background: var(--accent); color: white; }
+
+  /* Layout */
+  .app-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  .main-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    padding: 0.6rem 1rem;
+    gap: 0.5rem;
+    min-height: 0;
+  }
+
+  /* Pinned section */
+  .pinned-section { flex-shrink: 0; }
+  .section-label {
+    font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 0.3rem;
+  }
+  .pinned-grid {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  /* Scroll section - 화면 높이에 맞게 여러 줄 + 좌우 슬라이딩 */
+  .scroll-section {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .scroll-container {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    min-height: 0;
+  }
+  .scroll-track {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 6px;
+    will-change: transform;
+    /* height set dynamically by JS to fit available space */
+  }
+
+  /* Status indicator */
+  .si { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .si.healthy { background: var(--success); animation: pulse 2s infinite; }
+  .si.warning { background: var(--warning); animation: pulse 2s infinite; }
+  .si.critical { background: var(--danger); animation: pulse 2s infinite; }
+  .si.offline { background: var(--text-muted); }
+
+  /* Progress micro bar */
+  .pbar { height: 3px; border-radius: 2px; overflow: hidden; background: var(--bg-secondary); }
+  .pfill { height: 100%; border-radius: 2px; }
+
+  /* Row info badge */
+  .row-info {
+    font-size: 0.6rem; color: var(--text-muted); margin-left: 8px; font-weight: 400;
+  }
+</style>
+</head>
+<body>
+<div class="app-layout">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">📊</div>
+      <span class="logo-text">Infrastructure Dashboard</span>
+    </div>
+    <div class="header-right">
+      <div style="display:flex; gap:5px;">
+        <a href="#" class="ext-link prometheus">🔥 Prometheus</a>
+        <a href="#" class="ext-link grafana">📈 Grafana</a>
+      </div>
+      <div class="header-stats">
+        <div class="header-stat"><span class="dot ok"></span><span class="count" style="color:var(--success);" id="cntOk">-</span><span class="label">정상</span></div>
+        <div class="header-stat"><span class="dot warn"></span><span class="count" style="color:var(--warning);" id="cntWarn">-</span><span class="label">경고</span></div>
+        <div class="header-stat"><span class="dot crit"></span><span class="count" style="color:var(--danger);" id="cntCrit">-</span><span class="label">위험</span></div>
+        <div class="header-stat"><span class="dot off"></span><span class="count" style="color:var(--text-muted);" id="cntOff">-</span><span class="label">오프라인</span></div>
+      </div>
+      <div class="current-time" id="clock"></div>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="filter-group">
+      <button class="filter-btn active" data-filter="all">전체</button>
+      <button class="filter-btn" data-filter="메인서버">메인서버</button>
+      <button class="filter-btn" data-filter="TEST">TEST</button>
+      <button class="filter-btn" data-filter="DATALAKE">DATALAKE</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem;">
+      <div class="view-toggle">
+        <button class="view-btn" data-view="large">3열</button>
+        <button class="view-btn active" data-view="medium">5열</button>
+      </div>
+      <button class="filter-btn" onclick="location.reload()">🔄</button>
+      <button class="filter-btn active">⚙️ 관리</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main-content">
+    <!-- Pinned: critical + warning -->
+    <div class="pinned-section" id="pinnedSection">
+      <div class="section-label">🔴 주의 필요 — 고정 표시</div>
+      <div class="pinned-grid" id="pinnedGrid"></div>
+    </div>
+
+    <!-- Scrolling: healthy + offline -->
+    <div class="scroll-section" id="scrollSection">
+      <div class="section-label" id="scrollLabel">✅ 정상 / 💤 오프라인 — 자동 슬라이딩 (hover 시 정지)</div>
+      <div class="scroll-container" id="scrollContainer">
+        <div class="scroll-track" id="scrollTrack"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ===== Data =====
+const servers = [
+  { name: 'deok', project: '메인서버', icon: '🖥️', status: 'critical', cpu: 85.2, mem: 72.1, disk: 91.3 },
+  { name: 'jdy-ubuntu-24', project: 'TEST', icon: '🧪', status: 'warning', cpu: 71.5, mem: 68.3, disk: 55.2 },
+  { name: 'DataLake-DB-01', project: 'DATALAKE', icon: '🖥️', status: 'healthy', cpu: 22.1, mem: 45.7, disk: 38.4 },
+  { name: 'DataLake-PoC-01', project: 'DATALAKE', icon: '🖥️', status: 'healthy', cpu: 15.3, mem: 32.8, disk: 42.1 },
+  { name: 'DataLake-PoC-02', project: 'DATALAKE', icon: '🖥️', status: 'healthy', cpu: 18.7, mem: 38.5, disk: 40.0 },
+  { name: 'DataLake-PoC-03', project: 'DATALAKE', icon: '🖥️', status: 'healthy', cpu: 12.4, mem: 29.1, disk: 35.6 },
+  { name: 'master-node-01', project: 'TEST', icon: '🖥️', status: 'healthy', cpu: 34.2, mem: 55.1, disk: 48.3 },
+  { name: 'master-node-02', project: 'TEST', icon: '🖥️', status: 'warning', cpu: 72.8, mem: 61.4, disk: 52.7 },
+  { name: 'master-node-03', project: 'TEST', icon: '🖥️', status: 'healthy', cpu: 28.5, mem: 42.3, disk: 45.0 },
+  { name: 'jdy-download', project: 'TEST', icon: '🖥️', status: 'offline', cpu: 0, mem: 0, disk: 0 },
+  { name: 'web-server-01', project: '메인서버', icon: '🌐', status: 'healthy', cpu: 25.3, mem: 48.2, disk: 55.1 },
+  { name: 'web-server-02', project: '메인서버', icon: '🌐', status: 'healthy', cpu: 31.7, mem: 52.0, disk: 58.4 },
+  { name: 'db-replica-01', project: 'DATALAKE', icon: '🗄️', status: 'healthy', cpu: 45.1, mem: 62.3, disk: 71.2 },
+  { name: 'db-replica-02', project: 'DATALAKE', icon: '🗄️', status: 'warning', cpu: 55.2, mem: 74.1, disk: 68.5 },
+  { name: 'monitor-01', project: '메인서버', icon: '📡', status: 'healthy', cpu: 8.2, mem: 22.1, disk: 30.5 },
+  { name: 'cache-server', project: 'TEST', icon: '⚡', status: 'healthy', cpu: 12.5, mem: 35.0, disk: 20.3 },
+  { name: 'storage-01', project: 'DATALAKE', icon: '💾', status: 'healthy', cpu: 5.1, mem: 18.4, disk: 82.1 },
+  { name: 'storage-02', project: 'DATALAKE', icon: '💾', status: 'healthy', cpu: 6.3, mem: 20.1, disk: 79.5 },
+  { name: 'ci-runner-01', project: 'TEST', icon: '🔄', status: 'offline', cpu: 0, mem: 0, disk: 0 },
+  { name: 'backup-server', project: '메인서버', icon: '💿', status: 'healthy', cpu: 3.2, mem: 15.8, disk: 65.0 },
+];
+
+// ===== State =====
+let currentFilter = 'all';
+let currentView = 'medium'; // large | medium
+
+// ===== View Config =====
+const viewConfig = {
+  large:  { width: 280, height: 110, pad: '0.85rem', nameSize: '0.95rem', barH: '5px', labelW: '36px', lblSize: '0.7rem', valSize: '0.7rem', valW: '34px', nameMb: '0.4rem', metricGap: '3px', radius: '12px' },
+  medium: { width: 200, height: 82,  pad: '0.55rem',  nameSize: '0.82rem', barH: '4px', labelW: '28px', lblSize: '0.62rem', valSize: '0.62rem', valW: '30px', nameMb: '0.25rem', metricGap: '2px', radius: '10px' },
+};
+
+const GAP = 6; // px
+
+// ===== Utils =====
+function gc(v, type) {
+  if (!v) return 'var(--text-muted)';
+  const t = { cpu: {w:70,c:80}, memory: {w:70,c:80}, disk: {w:80,c:90} }[type];
+  return v >= t.c ? 'var(--danger)' : v >= t.w ? 'var(--warning)' : 'var(--success)';
+}
+
+// ===== Card renderer =====
+function renderCard(s) {
+  const v = viewConfig[currentView];
+  const off = s.status === 'offline';
+  const bc = s.status === 'critical' ? 'var(--danger)' : s.status === 'warning' ? 'var(--warning)' : 'var(--border)';
+
+  return `
+    <div style="background:var(--bg-card);border:1px solid ${bc};border-radius:${v.radius};padding:${v.pad};cursor:pointer;width:${v.width}px;height:${v.height}px;flex-shrink:0;transition:border-color 0.2s;overflow:hidden;"
+         onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='${bc}'">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${v.nameMb};">
+        <div style="display:flex;align-items:center;gap:5px;overflow:hidden;flex:1;">
+          <div class="si ${s.status}"></div>
+          <span style="font-size:${v.nameSize};font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.name}</span>
+        </div>
+        <span style="font-size:0.55rem;color:var(--text-muted);flex-shrink:0;margin-left:4px;">${s.project}</span>
+      </div>
+      ${['cpu','mem','disk'].map((type, i) => {
+        const label = ['CPU','MEM','DISK'][i];
+        const value = [s.cpu,s.mem,s.disk][i];
+        const pType = ['cpu','memory','disk'][i];
+        return `<div style="display:flex;align-items:center;gap:4px;${i ? 'margin-top:'+v.metricGap+';' : ''}">
+          <span style="font-size:${v.lblSize};color:var(--text-muted);min-width:${v.labelW};">${label}</span>
+          <div class="pbar" style="flex:1;height:${v.barH};"><div class="pfill" style="width:${off?0:value}%;background:${gc(value,pType)};"></div></div>
+          <span style="font-size:${v.valSize};font-weight:600;min-width:${v.valW};text-align:right;color:${gc(value,pType)};">${off?'--':value.toFixed(1)}%</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+// ===== Render =====
+function render() {
+  const filtered = currentFilter === 'all' ? servers : servers.filter(s => s.project === currentFilter);
+  const pinned = filtered.filter(s => s.status === 'critical' || s.status === 'warning');
+  const scrolling = filtered.filter(s => s.status === 'healthy' || s.status === 'offline');
+
+  // Stats
+  const counts = { healthy: 0, warning: 0, critical: 0, offline: 0 };
+  filtered.forEach(s => counts[s.status]++);
+  document.getElementById('cntOk').textContent = counts.healthy;
+  document.getElementById('cntWarn').textContent = counts.warning;
+  document.getElementById('cntCrit').textContent = counts.critical;
+  document.getElementById('cntOff').textContent = counts.offline;
+
+  // Pinned
+  const pinnedSection = document.getElementById('pinnedSection');
+  const pinnedGrid = document.getElementById('pinnedGrid');
+  if (pinned.length > 0) {
+    pinnedSection.style.display = '';
+    pinnedGrid.innerHTML = pinned.map(s => renderCard(s)).join('');
+  } else {
+    pinnedSection.style.display = 'none';
+  }
+
+  // Scrolling - 화면 높이에 맞게 여러 줄 배치 후 좌우 슬라이딩
+  const track = document.getElementById('scrollTrack');
+  track.innerHTML = '';
+  track.style.height = '0';
+  track.style.transform = 'translateX(0)';
+
+  // Layout이 확정된 후 높이 계산
+  requestAnimationFrame(() => {
+    const container = document.getElementById('scrollContainer');
+    const availH = container.clientHeight;
+    const v = viewConfig[currentView];
+
+    // 화면에 맞는 행 수 계산 (짤리면 한 줄 빼기)
+    const rows = Math.max(1, Math.floor((availH + GAP) / (v.height + GAP)));
+    const trackH = rows * (v.height + GAP) - GAP;
+
+    track.style.height = trackH + 'px';
+
+    // 레이블에 행 수 표시
+    const label = document.getElementById('scrollLabel');
+    label.innerHTML = `✅ 정상 / 💤 오프라인 — ${rows}행 자동 슬라이딩 <span class="row-info">(hover 시 정지)</span>`;
+
+    // 카드 렌더링
+    const cards = scrolling.map(s => renderCard(s)).join('');
+    track.innerHTML = cards;
+
+    // 슬라이딩이 필요한지 확인 (컨텐츠가 컨테이너보다 넓은 경우)
+    requestAnimationFrame(() => {
+      if (track.scrollWidth > container.clientWidth) {
+        // 무한 루프를 위해 카드 복제
+        track.innerHTML = cards + cards;
+        startSliding();
+      } else {
+        // 전부 보이므로 슬라이딩 불필요
+        stopSliding();
+      }
+    });
+  });
+}
+
+// ===== Auto Sliding =====
+let slideAnim = null;
+let slidePos = 0;
+let isPaused = false;
+
+function startSliding() {
+  if (slideAnim) cancelAnimationFrame(slideAnim);
+  slidePos = 0;
+
+  const track = document.getElementById('scrollTrack');
+  const speed = 0.3; // px/frame (~18px/sec at 60fps)
+
+  function step() {
+    if (!isPaused) {
+      slidePos += speed;
+      const halfWidth = track.scrollWidth / 2;
+      if (halfWidth > 0 && slidePos >= halfWidth) {
+        slidePos = 0;
+      }
+      track.style.transform = `translateX(-${slidePos}px)`;
+    }
+    slideAnim = requestAnimationFrame(step);
+  }
+
+  slideAnim = requestAnimationFrame(step);
+}
+
+function stopSliding() {
+  if (slideAnim) {
+    cancelAnimationFrame(slideAnim);
+    slideAnim = null;
+  }
+}
+
+// Hover pause
+document.getElementById('scrollContainer').addEventListener('mouseenter', () => { isPaused = true; });
+document.getElementById('scrollContainer').addEventListener('mouseleave', () => { isPaused = false; });
+
+// ===== Filter buttons =====
+document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    render();
+  });
+});
+
+// ===== View toggle =====
+document.querySelectorAll('.view-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentView = btn.dataset.view;
+    render();
+  });
+});
+
+// ===== Clock =====
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleString('ko-KR', {
+    year:'numeric', month:'2-digit', day:'2-digit',
+    hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false
+  });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ===== Window resize =====
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(render, 200);
+});
+
+// ===== Init =====
+render();
+</script>
+</body>
+</html>

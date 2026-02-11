@@ -27,12 +27,19 @@ export async function fetchServerMetrics(instance) {
   };
 
   try {
+    // up 메트릭으로 서버 온라인 여부를 먼저 확인 (staleness 문제 방지)
+    const upQuery = `up{instance="${instance}"}`;
+    const upValue = await fetchPrometheusMetric(upQuery);
+
+    if (upValue !== 1) {
+      // up 메트릭이 0이거나 없으면 즉시 offline 반환
+      return metrics;
+    }
+
+    metrics.status = 'online';
+
     const cpuQuery = `100 - (avg(irate(node_cpu_seconds_total{instance="${instance}",mode="idle"}[5m])) * 100)`;
     metrics.cpu = await fetchPrometheusMetric(cpuQuery);
-
-    if (metrics.cpu !== null) {
-      metrics.status = 'online';
-    }
 
     const memTotalQuery = `node_memory_MemTotal_bytes{instance="${instance}"}`;
     const memAvailQuery = `node_memory_MemAvailable_bytes{instance="${instance}"}`;
@@ -417,6 +424,149 @@ export async function fetchDiskIO(instance) {
   }
   
   return diskIO;
+}
+
+/**
+ * 전체 디스크(파일시스템) 조회 — rootfs 외 모든 실제 디스크
+ */
+export async function fetchAllDisks(instance) {
+  const disks = [];
+
+  try {
+    const sizeQuery = `node_filesystem_size_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat"}`;
+    const availQuery = `node_filesystem_avail_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat"}`;
+
+    const sizeRes = await fetch(
+      `${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent(sizeQuery)}`
+    );
+    const sizeData = await sizeRes.json();
+
+    const availRes = await fetch(
+      `${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent(availQuery)}`
+    );
+    const availData = await availRes.json();
+
+    if (sizeData.status === 'success' && availData.status === 'success') {
+      const availMap = {};
+      availData.data.result.forEach(r => {
+        availMap[r.metric.mountpoint] = parseFloat(r.value[1]);
+      });
+
+      sizeData.data.result.forEach(r => {
+        const mountpoint = r.metric.mountpoint;
+        const total = parseFloat(r.value[1]);
+        const avail = availMap[mountpoint];
+        if (total > 0 && avail !== undefined) {
+          disks.push({
+            mountpoint,
+            fstype: r.metric.fstype,
+            device: r.metric.device || '',
+            total,
+            avail,
+            used: total - avail,
+            usagePercent: ((total - avail) / total) * 100
+          });
+        }
+      });
+    }
+  } catch (e) {
+    console.error('Failed to fetch all disks:', e);
+  }
+
+  return disks;
+}
+
+/**
+ * Prometheus 벡터 쿼리 — 여러 결과를 배열로 반환
+ */
+async function fetchPrometheusVector(query) {
+  try {
+    const res = await fetch(
+      `${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent(query)}`
+    );
+    const data = await res.json();
+    if (data.status === 'success') {
+      return data.data.result;
+    }
+  } catch (e) {
+    console.error('Prometheus vector fetch error:', e);
+  }
+  return [];
+}
+
+/**
+ * MinIO 클러스터 용량 조회
+ */
+export async function fetchMinioCapacity() {
+  const minio = { total: null, used: null, usagePercent: null, buckets: [] };
+
+  try {
+    const totalResults = await fetchPrometheusVector('minio_cluster_capacity_usable_total_bytes');
+    const freeResults = await fetchPrometheusVector('minio_cluster_capacity_usable_free_bytes');
+
+    if (totalResults.length > 0 && freeResults.length > 0) {
+      minio.total = parseFloat(totalResults[0].value[1]);
+      const free = parseFloat(freeResults[0].value[1]);
+      minio.used = minio.total - free;
+      minio.usagePercent = minio.total > 0 ? (minio.used / minio.total) * 100 : 0;
+    }
+
+    // 버킷별 용량
+    const bucketResults = await fetchPrometheusVector('minio_bucket_usage_total_bytes');
+    bucketResults.forEach(r => {
+      minio.buckets.push({
+        name: r.metric.bucket,
+        size: parseFloat(r.value[1])
+      });
+    });
+  } catch (e) {
+    console.error('Failed to fetch MinIO capacity:', e);
+  }
+
+  return minio;
+}
+
+/**
+ * Longhorn 스토리지 용량 조회
+ */
+export async function fetchLonghornCapacity() {
+  const longhorn = { nodes: [], volumes: [] };
+
+  try {
+    // 노드별 스토리지
+    const capResults = await fetchPrometheusVector('longhorn_node_storage_capacity_bytes');
+    const usageResults = await fetchPrometheusVector('longhorn_node_storage_usage_bytes');
+
+    const usageMap = {};
+    usageResults.forEach(r => {
+      usageMap[r.metric.node] = parseFloat(r.value[1]);
+    });
+
+    capResults.forEach(r => {
+      const node = r.metric.node;
+      const capacity = parseFloat(r.value[1]);
+      const used = usageMap[node] || 0;
+      longhorn.nodes.push({
+        name: node,
+        capacity,
+        used,
+        usagePercent: capacity > 0 ? (used / capacity) * 100 : 0
+      });
+    });
+
+    // 볼륨별 용량
+    const volResults = await fetchPrometheusVector('longhorn_volume_actual_size_bytes');
+    volResults.forEach(r => {
+      longhorn.volumes.push({
+        name: r.metric.volume,
+        size: parseFloat(r.value[1])
+      });
+    });
+  } catch (e) {
+    console.error('Failed to fetch Longhorn capacity:', e);
+  }
+
+  return longhorn;
 }
 
 /**
