@@ -655,6 +655,88 @@ export async function fetchTopProcesses(instance, limit = 10) {
 }
 
 /**
+ * Kubernetes Pod 리소스 조회 (kube-state-metrics 필요)
+ * Pod 상태, CPU/MEM 요청량·제한량, 네임스페이스별 목록
+ */
+export async function fetchKubernetesPodResources() {
+  const result = { pods: [], nodes: [], summary: { total: 0, running: 0, pending: 0, failed: 0 } };
+  try {
+    // Pod 상태 + 컨테이너 리소스 요청/제한 병렬 조회
+    const [phaseRes, cpuReqRes, memReqRes, cpuLimRes, memLimRes, nodeRes] = await Promise.all([
+      fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent('kube_pod_status_phase{phase=~"Running|Pending|Failed"}')}`).then(r => r.json()).catch(() => null),
+      fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent('sum by (pod, namespace) (kube_pod_container_resource_requests{resource="cpu"})')}`).then(r => r.json()).catch(() => null),
+      fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent('sum by (pod, namespace) (kube_pod_container_resource_requests{resource="memory"})')}`).then(r => r.json()).catch(() => null),
+      fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent('sum by (pod, namespace) (kube_pod_container_resource_limits{resource="cpu"})')}`).then(r => r.json()).catch(() => null),
+      fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent('sum by (pod, namespace) (kube_pod_container_resource_limits{resource="memory"})')}`).then(r => r.json()).catch(() => null),
+      fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent('kube_node_status_allocatable{resource=~"cpu|memory"}')}`).then(r => r.json()).catch(() => null),
+    ]);
+
+    // Pod 상태 매핑 (value=1 인 phase만)
+    const podPhaseMap = {};
+    if (phaseRes?.status === 'success') {
+      phaseRes.data.result.forEach(r => {
+        if (r.value[1] === '1') {
+          const key = `${r.metric.namespace}/${r.metric.pod}`;
+          podPhaseMap[key] = { name: r.metric.pod, namespace: r.metric.namespace, phase: r.metric.phase };
+          result.summary[r.metric.phase.toLowerCase()] = (result.summary[r.metric.phase.toLowerCase()] || 0) + 1;
+          result.summary.total++;
+        }
+      });
+    }
+
+    // CPU/MEM 요청·제한 매핑
+    const resMap = {};
+    const mapResource = (data, field) => {
+      if (data?.status === 'success') {
+        data.data.result.forEach(r => {
+          const key = `${r.metric.namespace}/${r.metric.pod}`;
+          if (!resMap[key]) resMap[key] = {};
+          resMap[key][field] = parseFloat(r.value[1]);
+        });
+      }
+    };
+    mapResource(cpuReqRes, 'cpuReq');
+    mapResource(memReqRes, 'memReq');
+    mapResource(cpuLimRes, 'cpuLim');
+    mapResource(memLimRes, 'memLim');
+
+    // Pod 목록 조합
+    Object.keys(podPhaseMap).forEach(key => {
+      const pod = podPhaseMap[key];
+      const res = resMap[key] || {};
+      result.pods.push({
+        name: pod.name,
+        namespace: pod.namespace,
+        phase: pod.phase,
+        cpuReq: res.cpuReq || 0,   // cores
+        memReq: res.memReq || 0,   // bytes
+        cpuLim: res.cpuLim || 0,
+        memLim: res.memLim || 0,
+      });
+    });
+
+    // CPU 요청량 기준 내림차순 정렬
+    result.pods.sort((a, b) => b.cpuReq - a.cpuReq);
+
+    // 노드 allocatable
+    if (nodeRes?.status === 'success') {
+      const nodeMap = {};
+      nodeRes.data.result.forEach(r => {
+        const node = r.metric.node;
+        if (!nodeMap[node]) nodeMap[node] = {};
+        nodeMap[node][r.metric.resource] = parseFloat(r.value[1]);
+      });
+      Object.entries(nodeMap).forEach(([name, res]) => {
+        result.nodes.push({ name, cpu: res.cpu || 0, memory: res.memory || 0 });
+      });
+    }
+  } catch (e) {
+    console.error('Failed to fetch Kubernetes pod resources:', e);
+  }
+  return result;
+}
+
+/**
  * 시스템 정보 조회 (node_uname_info, 프로세스 수 등)
  * process-exporter 없을 때 fallback용
  */

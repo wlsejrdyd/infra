@@ -8,6 +8,7 @@ import {
   fetchLoadAverage,
   fetchAllDisks,
   fetchTopProcesses,
+  fetchKubernetesPodResources,
   fetchSystemInfo,
   fetchMinioCapacity,
   fetchLonghornCapacity,
@@ -388,14 +389,14 @@ async function updateServerData(server) {
     disksContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem;">디스크 정보 없음</div>';
   }
 
-  // Top Processes 또는 System Info (fallback)
+  // Top Processes → Kubernetes Resources → System Info (fallback 순서)
   const processes = await fetchTopProcesses(server.instance);
   const procContainer = document.getElementById('topProcessContainer');
   const titleEl = document.getElementById('infoCardTitle');
   const iconEl = document.getElementById('infoCardIcon');
 
   if (procContainer && processes.length > 0) {
-    // process-exporter 데이터 있음 → 프로세스 목록 표시
+    // 1순위: process-exporter 데이터 있음 → 프로세스 목록
     if (titleEl) titleEl.textContent = 'TOP PROCESSES (CPU)';
     if (iconEl) iconEl.textContent = '📊';
     procContainer.innerHTML = `
@@ -414,24 +415,70 @@ async function updateServerData(server) {
         </div>`;
     }).join('');
   } else if (procContainer) {
-    // fallback: 시스템 정보 표시
-    if (titleEl) titleEl.textContent = 'SYSTEM INFO';
-    if (iconEl) iconEl.textContent = '🖥️';
-    const sysInfo = await fetchSystemInfo(server.instance);
-    const row = (label, value) => `
-      <div style="display:flex;justify-content:space-between;padding:0.35rem 0;border-bottom:1px solid rgba(255,255,255,0.03);">
-        <span style="font-size:0.82rem;color:var(--text-muted);">${label}</span>
-        <span style="font-size:0.82rem;font-weight:600;">${value ?? '--'}</span>
-      </div>`;
-    procContainer.innerHTML =
-      row('Hostname', sysInfo.hostname) +
-      row('OS / Arch', `${sysInfo.os ?? '--'} ${sysInfo.machine ?? ''}`) +
-      row('Kernel', sysInfo.kernel) +
-      row('Running Procs', sysInfo.procsRunning != null ? Math.round(sysInfo.procsRunning) : '--') +
-      row('Blocked Procs', sysInfo.procsBlocked != null ? Math.round(sysInfo.procsBlocked) : '--') +
-      row('Open FDs', sysInfo.fileDescriptors != null ? Math.round(sysInfo.fileDescriptors).toLocaleString() : '--') +
-      row('Entropy', sysInfo.entropy != null ? Math.round(sysInfo.entropy).toLocaleString() : '--') +
-      row('Context Switches', sysInfo.contextSwitches != null ? `${(sysInfo.contextSwitches / 1000).toFixed(1)}K/s` : '--');
+    // 2순위: kube-state-metrics 데이터 시도
+    const k8sRes = await fetchKubernetesPodResources();
+    if (k8sRes.pods.length > 0) {
+      if (titleEl) titleEl.textContent = 'KUBERNETES RESOURCES';
+      if (iconEl) iconEl.textContent = '☸️';
+
+      const phaseColor = (phase) => {
+        if (phase === 'Running') return 'var(--success)';
+        if (phase === 'Pending') return 'var(--warning)';
+        return 'var(--danger)';
+      };
+      const fmtCpu = (cores) => cores >= 1 ? `${cores.toFixed(1)}c` : `${Math.round(cores * 1000)}m`;
+
+      // 요약 헤더
+      let html = `
+        <div style="display:flex;gap:1rem;padding:0 0 0.5rem;border-bottom:1px solid var(--border);margin-bottom:0.4rem;">
+          <span style="font-size:0.75rem;"><span style="color:var(--success);font-weight:700;">${k8sRes.summary.running}</span> <span style="color:var(--text-muted);">Running</span></span>
+          <span style="font-size:0.75rem;"><span style="color:var(--warning);font-weight:700;">${k8sRes.summary.pending}</span> <span style="color:var(--text-muted);">Pending</span></span>
+          <span style="font-size:0.75rem;"><span style="color:var(--danger);font-weight:700;">${k8sRes.summary.failed}</span> <span style="color:var(--text-muted);">Failed</span></span>
+          <span style="font-size:0.75rem;color:var(--text-muted);">Total <strong style="color:var(--text-primary);">${k8sRes.summary.total}</strong></span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:0 0 0.3rem;margin-bottom:0.2rem;">
+          <span style="font-size:0.68rem;color:var(--text-muted);font-weight:600;flex:1;">POD</span>
+          <span style="font-size:0.68rem;color:var(--text-muted);font-weight:600;min-width:50px;text-align:right;">CPU REQ</span>
+          <span style="font-size:0.68rem;color:var(--text-muted);font-weight:600;min-width:65px;text-align:right;">MEM REQ</span>
+          <span style="font-size:0.68rem;color:var(--text-muted);font-weight:600;min-width:18px;text-align:center;">⬤</span>
+        </div>
+      `;
+
+      // Pod 목록
+      k8sRes.pods.forEach((pod, i) => {
+        const shortName = pod.name.length > 30 ? pod.name.substring(0, 28) + '…' : pod.name;
+        html += `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:0.25rem 0;${i < k8sRes.pods.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.03);' : ''}">
+            <span style="font-size:0.78rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${pod.namespace}/${pod.name}">
+              <span style="color:var(--text-muted);font-size:0.7rem;">${pod.namespace}/</span>${shortName}
+            </span>
+            <span style="font-size:0.78rem;min-width:50px;text-align:right;font-weight:600;">${pod.cpuReq > 0 ? fmtCpu(pod.cpuReq) : '-'}</span>
+            <span style="font-size:0.78rem;min-width:65px;text-align:right;color:var(--text-muted);">${pod.memReq > 0 ? formatBytes(pod.memReq) : '-'}</span>
+            <span style="font-size:0.5rem;min-width:18px;text-align:center;color:${phaseColor(pod.phase)};">⬤</span>
+          </div>`;
+      });
+
+      procContainer.innerHTML = html;
+    } else {
+      // 3순위: fallback → 시스템 정보
+      if (titleEl) titleEl.textContent = 'SYSTEM INFO';
+      if (iconEl) iconEl.textContent = '🖥️';
+      const sysInfo = await fetchSystemInfo(server.instance);
+      const row = (label, value) => `
+        <div style="display:flex;justify-content:space-between;padding:0.35rem 0;border-bottom:1px solid rgba(255,255,255,0.03);">
+          <span style="font-size:0.82rem;color:var(--text-muted);">${label}</span>
+          <span style="font-size:0.82rem;font-weight:600;">${value ?? '--'}</span>
+        </div>`;
+      procContainer.innerHTML =
+        row('Hostname', sysInfo.hostname) +
+        row('OS / Arch', `${sysInfo.os ?? '--'} ${sysInfo.machine ?? ''}`) +
+        row('Kernel', sysInfo.kernel) +
+        row('Running Procs', sysInfo.procsRunning != null ? Math.round(sysInfo.procsRunning) : '--') +
+        row('Blocked Procs', sysInfo.procsBlocked != null ? Math.round(sysInfo.procsBlocked) : '--') +
+        row('Open FDs', sysInfo.fileDescriptors != null ? Math.round(sysInfo.fileDescriptors).toLocaleString() : '--') +
+        row('Entropy', sysInfo.entropy != null ? Math.round(sysInfo.entropy).toLocaleString() : '--') +
+        row('Context Switches', sysInfo.contextSwitches != null ? `${(sysInfo.contextSwitches / 1000).toFixed(1)}K/s` : '--');
+    }
   }
 
   // 차트 생성 (첫 실행 시에만)
