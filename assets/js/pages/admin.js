@@ -32,45 +32,64 @@ export async function renderAdmin() {
       <!-- Node Exporter Install Command -->
       <div class="card" style="margin-bottom: 1.5rem; background: var(--bg-secondary);">
         <div class="card-header">
-          <span class="card-title">📦 새 서버 추가 시 필요한 설치 명령어 (root 로 실행)</span>
+          <span class="card-title">📦 Node Exporter 설치 (서버 모니터링)</span>
         </div>
         <div style="display: flex; gap: 8px; align-items: center;">
-          <code id="installCmd" style="flex: 1; padding: 12px; background: var(--bg-primary); border-radius: 8px; font-family: monospace; font-size: 0.85rem; overflow-x: auto; white-space: nowrap;">
-            curl -sSL https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz | tar xz && mv node_exporter-1.7.0.linux-amd64/node_exporter /usr/local/bin/ && useradd -rs /bin/false node_exporter && tee /etc/systemd/system/node_exporter.service > /dev/null << 'SERVICE'
+          <code id="installCmd" style="flex: 1; padding: 12px; background: var(--bg-primary); border-radius: 8px; font-family: monospace; font-size: 0.85rem; overflow-x: auto; white-space: nowrap;">curl -sSL https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz | tar xz && mv node_exporter-1.7.0.linux-amd64/node_exporter /usr/local/bin/ && useradd -rs /bin/false node_exporter && tee /etc/systemd/system/node_exporter.service > /dev/null &lt;&lt; 'SERVICE'
 [Unit]
 Description=Node Exporter
 After=network.target
-
 [Service]
 User=node_exporter
 Group=node_exporter
 Type=simple
 ExecStart=/usr/local/bin/node_exporter
-
 [Install]
 WantedBy=multi-user.target
 SERVICE
-systemctl daemon-reload && systemctl enable node_exporter && systemctl start node_exporter
-	  </code>
+systemctl daemon-reload && systemctl enable node_exporter && systemctl start node_exporter</code>
           <button class="btn btn-primary" id="copyInstallBtn">
             📋 복사
           </button>
+        </div>
+        <div style="margin-top: 0.75rem; padding: 0.6rem 0.8rem; background: var(--bg-primary); border-radius: 6px; font-size: 0.8rem;">
+          <div style="color: var(--text-muted); margin-bottom: 0.3rem;">Prometheus 설정 (prometheus.yml)</div>
+          <code style="color: var(--text-primary); font-size: 0.8rem;">- job_name: 'node'</code><br>
+          <code style="color: var(--text-primary); font-size: 0.8rem;">&nbsp;&nbsp;static_configs:</code><br>
+          <code style="color: var(--text-primary); font-size: 0.8rem;">&nbsp;&nbsp;&nbsp;&nbsp;- targets: ['<span style="color: var(--warning);">서버IP</span>:9100']</code>
         </div>
       </div>
 
       <!-- Kube-State-Metrics Install Command -->
       <div class="card" style="margin-bottom: 1.5rem; background: var(--bg-secondary);">
         <div class="card-header">
-          <span class="card-title">☸️ Kubernetes 모니터링 추가 시 설치 명령어 (K8s 클러스터에서 실행)</span>
+          <span class="card-title">☸️ Kube-State-Metrics 설치 (K8s 모니터링)</span>
         </div>
         <div style="display: flex; gap: 8px; align-items: center;">
-          <code id="k8sInstallCmd" style="flex: 1; padding: 12px; background: var(--bg-primary); border-radius: 8px; font-family: monospace; font-size: 0.85rem; overflow-x: auto; white-space: nowrap;">kubectl apply -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/cluster-role-binding.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/cluster-role.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/deployment.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/service.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/service-account.yaml && kubectl patch svc kube-state-metrics -n kube-system -p '{"spec":{"type":"NodePort","ports":[{"port":8080,"targetPort":"http-metrics","nodePort":30047}]}}'</code>
+          <code id="k8sInstallCmd" style="flex: 1; padding: 12px; background: var(--bg-primary); border-radius: 8px; font-family: monospace; font-size: 0.85rem; overflow-x: auto; white-space: nowrap;">kubectl apply -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/cluster-role-binding.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/cluster-role.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/deployment.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/service.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/service-account.yaml && kubectl apply -f - &lt;&lt;EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-state-metrics-nodeport
+  namespace: kube-system
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: kube-state-metrics
+  ports:
+    - port: 8080
+      targetPort: http-metrics
+      nodePort: 30047
+EOF</code>
           <button class="btn btn-primary" id="copyK8sInstallBtn">
             📋 복사
           </button>
         </div>
-        <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);">
-          설치 후 Prometheus 설정에 추가: <code style="background: var(--bg-primary); padding: 2px 6px; border-radius: 4px;">- job_name: 'kube-state-metrics'</code> → <code style="background: var(--bg-primary); padding: 2px 6px; border-radius: 4px;">targets: ['서버IP:30047']</code>
+        <div style="margin-top: 0.75rem; padding: 0.6rem 0.8rem; background: var(--bg-primary); border-radius: 6px; font-size: 0.8rem;">
+          <div style="color: var(--text-muted); margin-bottom: 0.3rem;">Prometheus 설정 (prometheus.yml)</div>
+          <code style="color: var(--text-primary); font-size: 0.8rem;">- job_name: 'kube-state-metrics'</code><br>
+          <code style="color: var(--text-primary); font-size: 0.8rem;">&nbsp;&nbsp;static_configs:</code><br>
+          <code style="color: var(--text-primary); font-size: 0.8rem;">&nbsp;&nbsp;&nbsp;&nbsp;- targets: ['<span style="color: var(--warning);">서버IP</span>:30047']</code>
         </div>
       </div>
 
