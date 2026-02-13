@@ -656,7 +656,7 @@ export async function fetchTopProcesses(instance, limit = 10) {
 
 /**
  * Kubernetes Pod 리소스 조회 (kube-state-metrics 필요)
- * instance(예: 192.168.100.5:9100) → kube_node_info의 internal_ip로 노드 매핑
+ * instance(예: 192.168.100.5:9100) → kube_node_status_addresses로 노드 매핑
  * → 해당 노드에 스케줄된 Pod만 필터링
  */
 export async function fetchKubernetesPodResources(instance) {
@@ -664,18 +664,42 @@ export async function fetchKubernetesPodResources(instance) {
   try {
     const serverIp = instance ? instance.split(':')[0] : null;
 
-    // 1단계: kube_node_info에서 서버 IP → K8s 노드 이름 매핑
-    const nodeInfoRes = await fetch(
-      `${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent('kube_node_info')}`
-    ).then(r => r.json()).catch(() => null);
-
-    if (!nodeInfoRes?.status === 'success') return result;
+    // 1단계: 서버 IP → K8s 노드 이름 매핑
+    // kube_node_status_addresses{type="InternalIP"} 의 address 라벨로 매핑
+    const [addrRes, nodeInfoRes] = await Promise.all([
+      fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent('kube_node_status_addresses{type="InternalIP"}')}`).then(r => r.json()).catch(() => null),
+      fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent('kube_node_info')}`).then(r => r.json()).catch(() => null),
+    ]);
 
     let nodeName = null;
-    if (serverIp && nodeInfoRes?.status === 'success') {
-      const match = nodeInfoRes.data.result.find(r => r.metric.internal_ip === serverIp);
-      if (match) nodeName = match.metric.node;
+
+    // [DEBUG] 어떤 라벨이 오는지 콘솔 로그
+    console.log('[K8s] serverIp:', serverIp);
+    console.log('[K8s] kube_node_status_addresses:', addrRes?.data?.result?.map(r => r.metric));
+    console.log('[K8s] kube_node_info:', nodeInfoRes?.data?.result?.map(r => r.metric));
+
+    if (serverIp) {
+      // 방법1: kube_node_status_addresses — address 라벨로 매핑
+      if (addrRes?.status === 'success') {
+        const match = addrRes.data.result.find(r => r.metric.address === serverIp);
+        if (match) nodeName = match.metric.node;
+      }
+      // 방법2: kube_node_info — internal_ip 라벨로 매핑 (kube-state-metrics 버전에 따라)
+      if (!nodeName && nodeInfoRes?.status === 'success') {
+        const match = nodeInfoRes.data.result.find(r => r.metric.internal_ip === serverIp);
+        if (match) nodeName = match.metric.node;
+      }
+      // 방법3: localhost → Prometheus가 실행 중인 노드 (node_exporter IP와 K8s 노드 IP 비교)
+      if (!nodeName && (serverIp === 'localhost' || serverIp === '127.0.0.1')) {
+        if (addrRes?.status === 'success' && addrRes.data.result.length > 0) {
+          nodeName = addrRes.data.result[0].metric.node;
+        } else if (nodeInfoRes?.status === 'success' && nodeInfoRes.data.result.length > 0) {
+          nodeName = nodeInfoRes.data.result[0].metric.node;
+        }
+      }
     }
+
+    console.log('[K8s] matched nodeName:', nodeName);
 
     // 이 서버가 K8s 노드가 아니면 빈 결과 반환 (→ SYSTEM INFO fallback)
     if (!nodeName) return result;
