@@ -415,10 +415,10 @@ async function updateServerData(server) {
         </div>`;
     }).join('');
   } else if (procContainer) {
-    // 2순위: kube-state-metrics 데이터 시도
-    const k8sRes = await fetchKubernetesPodResources();
+    // 2순위: kube-state-metrics 데이터 시도 (서버 IP → 해당 노드 Pod만)
+    const k8sRes = await fetchKubernetesPodResources(server.instance);
     if (k8sRes.pods.length > 0) {
-      if (titleEl) titleEl.textContent = 'KUBERNETES RESOURCES';
+      if (titleEl) titleEl.textContent = `KUBERNETES — ${k8sRes.nodeName || 'CLUSTER'}`;
       if (iconEl) iconEl.textContent = '☸️';
 
       const phaseColor = (phase) => {
@@ -429,12 +429,16 @@ async function updateServerData(server) {
       const fmtCpu = (cores) => cores >= 1 ? `${cores.toFixed(1)}c` : `${Math.round(cores * 1000)}m`;
 
       // 요약 헤더
+      const alloc = k8sRes.nodeAllocatable;
+      const totalCpuReq = k8sRes.pods.reduce((s, p) => s + p.cpuReq, 0);
+      const totalMemReq = k8sRes.pods.reduce((s, p) => s + p.memReq, 0);
       let html = `
-        <div style="display:flex;gap:1rem;padding:0 0 0.5rem;border-bottom:1px solid var(--border);margin-bottom:0.4rem;">
+        <div style="display:flex;gap:1rem;padding:0 0 0.5rem;border-bottom:1px solid var(--border);margin-bottom:0.4rem;flex-wrap:wrap;">
           <span style="font-size:0.75rem;"><span style="color:var(--success);font-weight:700;">${k8sRes.summary.running}</span> <span style="color:var(--text-muted);">Running</span></span>
           <span style="font-size:0.75rem;"><span style="color:var(--warning);font-weight:700;">${k8sRes.summary.pending}</span> <span style="color:var(--text-muted);">Pending</span></span>
           <span style="font-size:0.75rem;"><span style="color:var(--danger);font-weight:700;">${k8sRes.summary.failed}</span> <span style="color:var(--text-muted);">Failed</span></span>
           <span style="font-size:0.75rem;color:var(--text-muted);">Total <strong style="color:var(--text-primary);">${k8sRes.summary.total}</strong></span>
+          ${alloc ? `<span style="font-size:0.7rem;color:var(--text-muted);margin-left:auto;">CPU ${fmtCpu(totalCpuReq)}/${fmtCpu(alloc.cpu)} · MEM ${formatBytes(totalMemReq)}/${formatBytes(alloc.memory)}</span>` : ''}
         </div>
         <div style="display:flex;justify-content:space-between;padding:0 0 0.3rem;margin-bottom:0.2rem;">
           <span style="font-size:0.68rem;color:var(--text-muted);font-weight:600;flex:1;">POD</span>
