@@ -673,11 +673,6 @@ export async function fetchKubernetesPodResources(instance) {
 
     let nodeName = null;
 
-    // [DEBUG] 어떤 라벨이 오는지 콘솔 로그
-    console.log('[K8s] serverIp:', serverIp);
-    console.log('[K8s] kube_node_status_addresses:', addrRes?.data?.result?.map(r => r.metric));
-    console.log('[K8s] kube_node_info:', nodeInfoRes?.data?.result?.map(r => r.metric));
-
     if (serverIp) {
       // 방법1: kube_node_status_addresses — address 라벨로 매핑
       if (addrRes?.status === 'success') {
@@ -698,8 +693,6 @@ export async function fetchKubernetesPodResources(instance) {
         }
       }
     }
-
-    console.log('[K8s] matched nodeName:', nodeName);
 
     // 이 서버가 K8s 노드가 아니면 빈 결과 반환 (→ SYSTEM INFO fallback)
     if (!nodeName) return result;

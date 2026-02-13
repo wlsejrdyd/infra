@@ -58,6 +58,22 @@ systemctl daemon-reload && systemctl enable node_exporter && systemctl start nod
         </div>
       </div>
 
+      <!-- Kube-State-Metrics Install Command -->
+      <div class="card" style="margin-bottom: 1.5rem; background: var(--bg-secondary);">
+        <div class="card-header">
+          <span class="card-title">☸️ Kubernetes 모니터링 추가 시 설치 명령어 (K8s 클러스터에서 실행)</span>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <code id="k8sInstallCmd" style="flex: 1; padding: 12px; background: var(--bg-primary); border-radius: 8px; font-family: monospace; font-size: 0.85rem; overflow-x: auto; white-space: nowrap;">kubectl apply -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/cluster-role-binding.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/cluster-role.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/deployment.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/service.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/service-account.yaml && kubectl patch svc kube-state-metrics -n kube-system -p '{"spec":{"type":"NodePort","ports":[{"port":8080,"targetPort":"http-metrics","nodePort":30047}]}}'</code>
+          <button class="btn btn-primary" id="copyK8sInstallBtn">
+            📋 복사
+          </button>
+        </div>
+        <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);">
+          설치 후 Prometheus 설정에 추가: <code style="background: var(--bg-primary); padding: 2px 6px; border-radius: 4px;">- job_name: 'kube-state-metrics'</code> → <code style="background: var(--bg-primary); padding: 2px 6px; border-radius: 4px;">targets: ['서버IP:30047']</code>
+        </div>
+      </div>
+
       <!-- Thresholds Settings -->
       <div class="card" style="margin-bottom: 1.5rem;">
         <div class="card-header">
@@ -134,7 +150,8 @@ systemctl daemon-reload && systemctl enable node_exporter && systemctl start nod
 
   // 이벤트 리스너 등록 (onclick 대신 addEventListener 사용)
   document.getElementById('addServerBtn').addEventListener('click', showAddServerModal);
-  document.getElementById('copyInstallBtn').addEventListener('click', copyInstallCmd);
+  document.getElementById('copyInstallBtn').addEventListener('click', () => copyCmd('installCmd'));
+  document.getElementById('copyK8sInstallBtn').addEventListener('click', () => copyCmd('k8sInstallCmd'));
   document.getElementById('saveThresholdsBtn').addEventListener('click', async () => {
     console.log('Save button clicked'); // 디버그
     await saveThresholds();
@@ -150,10 +167,10 @@ systemctl daemon-reload && systemctl enable node_exporter && systemctl start nod
   });
 }
 
-function copyInstallCmd() {
-  const cmd = document.getElementById('installCmd').textContent.trim();
+function copyCmd(elementId) {
+  const cmd = document.getElementById(elementId).textContent.trim();
   navigator.clipboard.writeText(cmd).then(() => {
-    alert('복사되었습니다! 새 서버에서 실행하세요.');
+    alert('복사되었습니다!');
   }).catch(err => {
     console.error('복사 실패:', err);
     alert('복사 실패. 수동으로 복사해주세요.');
