@@ -40,8 +40,8 @@ export async function fetchServerMetrics(instance) {
 
     // 모든 메트릭 병렬 fetch (순차 대비 ~6배 빠름)
     const cpuQuery = `100 - (avg(irate(node_cpu_seconds_total{instance="${instance}",mode="idle"}[5m])) * 100)`;
-    const diskSizeQuery = `node_filesystem_size_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat"}`;
-    const diskAvailQuery = `node_filesystem_avail_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat"}`;
+    const diskSizeQuery = `node_filesystem_size_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat|nfs|nfs4"}`;
+    const diskAvailQuery = `node_filesystem_avail_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat|nfs|nfs4"}`;
 
     const [cpu, memTotal, memAvail, diskSizeData, diskAvailData, bootTime] = await Promise.all([
       fetchPrometheusMetric(cpuQuery),
@@ -459,8 +459,8 @@ export async function fetchAllDisks(instance) {
   const disks = [];
 
   try {
-    const sizeQuery = `node_filesystem_size_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat"}`;
-    const availQuery = `node_filesystem_avail_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat"}`;
+    const sizeQuery = `node_filesystem_size_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat|nfs|nfs4"}`;
+    const availQuery = `node_filesystem_avail_bytes{instance="${instance}",fstype=~"ext4|xfs|btrfs|vfat|nfs|nfs4"}`;
 
     const sizeRes = await fetch(
       `${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent(sizeQuery)}`

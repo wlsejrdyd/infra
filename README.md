@@ -13,11 +13,8 @@
 | Frontend | HTML5, CSS3, Vanilla JavaScript (ES6 Modules) |
 | Charts | Chart.js 3.9.1 (CDN) |
 | Backend API | Python Flask, Flask-CORS |
-| Monitoring | Prometheus, Node Exporter |
-| Visualization | Grafana |
-| Container | Kubernetes (K3s), kube-state-metrics |
-| Storage | MinIO, Longhorn |
-| Alerting | Slack Web API (Bot Token) |
+| Monitoring | Prometheus, Node Exporter, kube-state-metrics |
+| Alerting | 경고음(Web Audio), 브라우저 알림, 토스트, Slack Web API |
 | Web Server | Nginx (리버스 프록시 + 정적 파일 서빙) |
 | OS | Rocky Linux 9 |
 
@@ -38,7 +35,7 @@ infra/
 │   │   └── components.css        # 카드, 버튼, 모달, 상태 표시기 등
 │   ├── js/
 │   │   ├── app.js                # 앱 초기화, 헤더(인라인 상태 카운터), 라우터
-│   │   ├── api.js                # Prometheus 메트릭 fetch (CPU, MEM, Disk, MinIO, Longhorn)
+│   │   ├── api.js                # Prometheus 메트릭 fetch (CPU, MEM, Disk, K8s, MinIO, Longhorn)
 │   │   ├── config.js             # 전역 설정 (URL, 갱신주기)
 │   │   ├── router.js             # 해시 기반 SPA 라우터
 │   │   └── pages/
@@ -66,22 +63,32 @@ infra/
 ### 서버 상세
 - CPU/Memory 1시간 히스토리 차트
 - 네트워크 트래픽(In/Out), 디스크 I/O, Load Average
-- 전체 파일시스템 디스크 사용량 (ext4/xfs/btrfs/vfat)
-- MinIO 클러스터 용량 + 버킷별 사용량 (메트릭 존재 시)
-- Longhorn 노드별 스토리지 + 볼륨 목록 (메트릭 존재 시)
+- 전체 파일시스템 디스크 사용량 (ext4/xfs/btrfs/vfat/nfs/nfs4)
+- MinIO 클러스터 용량 + 버킷별 사용량 (메트릭 존재 시 자동 표시)
+- Longhorn 노드별 스토리지 + 볼륨 목록 (메트릭 존재 시 자동 표시)
+- Kubernetes Pod 리소스 (kube-state-metrics 연동 시, process-exporter 없을 때 fallback)
 
 ### 오프라인 감지
 - Prometheus `up` 메트릭으로 즉시 감지 (CPU staleness 5분 대기 없음)
 
-### Slack 알림
-- 상태 변화 시 Slack 채널에 자동 알림
-- warning/critical 진입: 채널 메시지 전송 (중복 발송 차단)
+### 알림 시스템
+상태 변화(warning/critical/offline/복구) 시 다중 채널로 알림 발송:
+
+| 알림 채널 | 동작 | 설정 |
+|-----------|------|------|
+| 경고음 (Web Audio API) | 880Hz 비프 2회 재생 | 항상 활성 |
+| 브라우저 알림 (Notification API) | 데스크톱 알림 팝업 | 브라우저 권한 필요 |
+| 토스트 알림 | 페이지 내 우측 상단 토스트 (5초 자동 소멸) | 항상 활성 |
+| Slack | 채널 메시지 + 리소스 상세 (CPU/MEM/DISK %) | 토글 ON/OFF, Bot Token 필요 |
+
+- warning/critical 진입: Slack 채널에 메시지 전송 (중복 발송 차단, 리소스 수치 포함)
 - healthy 복구: 이전 알림 스레드에 댓글로 복구 알림
 - `alert_state.json`으로 서버별 알림 상태 추적
 
 ### 서버 관리
-- Admin 페이지에서 서버 추가/수정/삭제
+- 관리 페이지에서 서버 추가/수정/삭제
 - Node Exporter 인스턴스 등록, 프로젝트 분류, 개별 임계치 설정
+- Node Exporter / kube-state-metrics 설치 가이드 및 Prometheus 설정 예시 제공
 
 ---
 
@@ -92,8 +99,8 @@ infra/
 | 시스템 메트릭 (CPU, Memory, Disk) | Prometheus > Node Exporter | 10초 |
 | 서비스 상태 | Prometheus `up` 메트릭 | 10초 |
 | Kubernetes 상태 | Prometheus > kube-state-metrics | 10초 |
-| MinIO 스토리지 | Prometheus > MinIO 메트릭 | 10초 |
-| Longhorn 스토리지 | Prometheus > Longhorn 메트릭 | 10초 |
+| MinIO 스토리지 | Prometheus > MinIO Exporter | 10초 (메트릭 존재 시) |
+| Longhorn 스토리지 | Prometheus > Longhorn Exporter | 10초 (메트릭 존재 시) |
 
 ---
 

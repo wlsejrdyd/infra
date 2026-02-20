@@ -194,6 +194,19 @@ def handle_alert():
             label = label_map[status]
             text = f"{emoji} *[{label}] {server_name}* (`{server_id}`)\n상태가 {label}(으)로 변경되었습니다."
 
+            # 리소스 상세정보 추가
+            metrics = body.get('metrics', {})
+            if metrics:
+                parts = []
+                if metrics.get('cpu') is not None:
+                    parts.append(f"CPU: {metrics['cpu']}%")
+                if metrics.get('memory') is not None:
+                    parts.append(f"MEM: {metrics['memory']}%")
+                if metrics.get('disk') is not None:
+                    parts.append(f"DISK: {metrics['disk']}%")
+                if parts:
+                    text += f"\n📊 {' | '.join(parts)}"
+
             ts = _slack_post_message(SLACK_CHANNEL, text)
             if ts:
                 state[server_id] = {'ts': ts, 'status': status}

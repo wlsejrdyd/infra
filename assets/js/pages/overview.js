@@ -372,7 +372,12 @@ async function updateServerGrid() {
       playAlertSound();
       showBrowserNotification(server.name, curr);
       if (alertEnabled) {
-        sendAlertToBackend(server.id, server.name, curr);
+        const m = server._metrics || {};
+        sendAlertToBackend(server.id, server.name, curr, {
+          cpu: m.cpu != null ? m.cpu.toFixed(1) : null,
+          memory: m.memory != null ? m.memory.toFixed(1) : null,
+          disk: m.disk != null ? m.disk.toFixed(1) : null,
+        });
       }
     }
     previousStatusMap[server.id] = curr;
@@ -435,12 +440,13 @@ function renderServerGrid() {
     track.style.height = trackH + 'px';
     track.style.gap = dg + 'px';
 
-    // Pinned 섹션 (같은 카드 크기 사용)
+    // Pinned 섹션 (같은 카드 크기 + 동일 간격 사용)
     const pinnedSection = document.getElementById('pinnedSection');
     const pinnedGrid = document.getElementById('pinnedGrid');
     if (pinnedSection && pinnedGrid) {
       if (pinned.length > 0) {
         pinnedSection.style.display = '';
+        pinnedGrid.style.gap = dg + 'px';
         pinnedGrid.innerHTML = pinned.map(s => renderCompactCard(s)).join('');
       } else {
         pinnedSection.style.display = 'none';
@@ -593,12 +599,12 @@ function startAutoUpdate() {
 /**
  * Slack 알림 전송
  */
-async function sendAlertToBackend(serverId, serverName, status) {
+async function sendAlertToBackend(serverId, serverName, status, metrics = {}) {
   try {
     const res = await fetch('/api/alert', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ serverId, serverName, status })
+      body: JSON.stringify({ serverId, serverName, status, metrics })
     });
     const data = await res.json();
     console.log(`[Slack API] ${serverName}(${status}):`, res.status, data);
