@@ -104,6 +104,23 @@ infra/
 
 ---
 
+## 포트 맵
+
+| 포트 | 서비스 | 프로토콜 | 비고 |
+|------|--------|----------|------|
+| 80 | Nginx | TCP | 웹 서버 (정적 파일 + 리버스 프록시) |
+| 5000 | Flask API | TCP | 서버 CRUD, Slack 알림 (내부) |
+| 9090 | Prometheus | TCP | 메트릭 수집/쿼리 |
+| 9100 | Node Exporter | TCP | 서버별 시스템 메트릭 |
+| 3000 | Grafana | TCP | 대시보드 (선택) |
+| 30047 | kube-state-metrics | NodePort | K8s 오브젝트 상태 메트릭 |
+| 9000 | MinIO | TCP | 오브젝트 스토리지 + 메트릭 (`/minio/v2/metrics/cluster`) |
+| 9500 | Longhorn Manager | TCP | 분산 스토리지 메트릭 |
+
+> MinIO/Longhorn이 K8s 내부에서 실행 중이면 NodePort 서비스를 생성하여 Prometheus가 외부에서 scrape할 수 있도록 포트를 열어야 합니다.
+
+---
+
 ## 임계치 기본값
 
 | 메트릭 | Warning | Critical |
