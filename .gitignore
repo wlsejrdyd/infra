@@ -61,3 +61,7 @@ rebel.xml
 
 # Backup
 reports/backup_*
+
+# Claude Code
+.claude/
+CLAUDE.md
