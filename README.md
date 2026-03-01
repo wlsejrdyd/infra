@@ -26,8 +26,10 @@
 infra/
 ├── index.html                    # SPA 진입점
 ├── api/
-│   ├── server.py                 # Flask API (서버 CRUD, Slack 알림)
-│   └── .env                      # 환경변수 (SLACK_BOT_TOKEN 등, git 미추적)
+│   ├── server.py                 # Flask API (서버 CRUD, Slack 알림, 알림 토글)
+│   ├── .env                      # 환경변수 (SLACK_BOT_TOKEN 등, git 미추적)
+│   ├── alert_state.json          # 서버별 알림 상태 추적 (런타임 생성)
+│   └── alert_config.json         # 알림 ON/OFF 설정 (런타임 생성)
 ├── assets/
 │   ├── css/
 │   │   ├── variables.css         # CSS 변수, 다크 테마, 색상 정의
@@ -36,7 +38,7 @@ infra/
 │   ├── js/
 │   │   ├── app.js                # 앱 초기화, 헤더(인라인 상태 카운터), 라우터
 │   │   ├── api.js                # Prometheus 메트릭 fetch (CPU, MEM, Disk, K8s, MinIO, Longhorn)
-│   │   ├── config.js             # 전역 설정 (URL, 갱신주기)
+│   │   ├── config.js             # 전역 설정 (URL, 갱신주기, GitHub 연동, 서비스 목록)
 │   │   ├── router.js             # 해시 기반 SPA 라우터
 │   │   └── pages/
 │   │       ├── overview.js       # 서버 목록 (pinned+scroll, 뷰모드, 슬라이딩)
@@ -44,6 +46,8 @@ infra/
 │   │       └── admin.js          # 서버 관리 (추가/수정/삭제)
 │   └── data/
 │       └── servers.json          # 서버 목록 및 임계치 설정
+├── docs/
+│   └── preview.png               # UI 프리뷰 이미지
 └── preview-design.html           # 디자인 프리뷰 (개발용, 배포 불필요)
 ```
 
@@ -84,6 +88,10 @@ infra/
 - warning/critical 진입: Slack 채널에 메시지 전송 (중복 발송 차단, 리소스 수치 포함)
 - healthy 복구: 이전 알림 스레드에 댓글로 복구 알림
 - `alert_state.json`으로 서버별 알림 상태 추적
+- `alert_config.json`으로 Slack 알림 전체 ON/OFF 토글 (`/api/alert/config`)
+
+### GitHub 연동
+- 헤더에 연결된 GitHub 리포지토리 커밋 활동 표시 (infra, salm, mgmt)
 
 ### 서버 관리
 - 관리 페이지에서 서버 추가/수정/삭제
@@ -113,6 +121,7 @@ infra/
 | 9090 | Prometheus | TCP | 메트릭 수집/쿼리 |
 | 9100 | Node Exporter | TCP | 서버별 시스템 메트릭 |
 | 3000 | Grafana | TCP | 대시보드 (선택) |
+| 9981 | MariaDB | TCP | 데이터베이스 (모니터링 대상) |
 | 30047 | kube-state-metrics | NodePort | K8s 오브젝트 상태 메트릭 |
 | 9000 | MinIO | TCP | 오브젝트 스토리지 + 메트릭 (`/minio/v2/metrics/cluster`) |
 | 9500 | Longhorn Manager | TCP | 분산 스토리지 메트릭 |
