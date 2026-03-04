@@ -124,11 +124,33 @@ EOF</code>
           <div class="form-group">
             <label class="form-label">Disk</label>
             <div style="display: flex; gap: 8px;">
-              <input type="number" class="form-input" id="diskWarning" 
-                     value="${serversData.defaultThresholds.disk.warning}" 
+              <input type="number" class="form-input" id="diskWarning"
+                     value="${serversData.defaultThresholds.disk.warning}"
                      placeholder="경고" style="flex: 1;">
-              <input type="number" class="form-input" id="diskCritical" 
-                     value="${serversData.defaultThresholds.disk.critical}" 
+              <input type="number" class="form-input" id="diskCritical"
+                     value="${serversData.defaultThresholds.disk.critical}"
+                     placeholder="위험" style="flex: 1;">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">K8s CPU Request</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="number" class="form-input" id="cpuRequestWarning"
+                     value="${(serversData.defaultThresholds.cpuRequest || {warning:80}).warning}"
+                     placeholder="경고" style="flex: 1;">
+              <input type="number" class="form-input" id="cpuRequestCritical"
+                     value="${(serversData.defaultThresholds.cpuRequest || {critical:90}).critical}"
+                     placeholder="위험" style="flex: 1;">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">K8s MEM Request</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="number" class="form-input" id="memRequestWarning"
+                     value="${(serversData.defaultThresholds.memoryRequest || {warning:80}).warning}"
+                     placeholder="경고" style="flex: 1;">
+              <input type="number" class="form-input" id="memRequestCritical"
+                     value="${(serversData.defaultThresholds.memoryRequest || {critical:90}).critical}"
                      placeholder="위험" style="flex: 1;">
             </div>
           </div>
@@ -371,8 +393,21 @@ function showServerModal(server) {
 
         <div class="form-group">
           <label class="form-label">설명</label>
-          <input type="text" class="form-input" id="serverDescription" value="${server.description}" 
+          <input type="text" class="form-input" id="serverDescription" value="${server.description}"
                  placeholder="서버 설명">
+        </div>
+
+        <div class="form-group" id="pushApiKeyGroup" style="display: ${mode === 'push' ? 'block' : 'none'};">
+          <label class="form-label">Push API Key</label>
+          <div style="display: flex; gap: 6px;">
+            <input type="text" class="form-input" id="pushApiKey" value="${server.pushApiKey || ''}"
+                   readonly style="flex: 1; font-family: monospace; font-size: 0.85rem;">
+            <button type="button" class="btn" id="copyApiKeyBtn" title="복사" style="padding: 0.4rem 0.7rem;">📋</button>
+            <button type="button" class="btn" id="regenApiKeyBtn" title="재생성" style="padding: 0.4rem 0.7rem;">🔄</button>
+          </div>
+          <small style="color: var(--text-secondary); margin-top: 4px; display: block;">
+            Push Agent의 agent_config.json &gt; api_key에 이 값을 설정하세요.
+          </small>
         </div>
 
         <div style="display: flex; gap: 8px; margin-top: 1.5rem;">
@@ -393,14 +428,44 @@ function showServerModal(server) {
     if (e.target.id === 'modalOverlay') closeModal();
   });
 
-  // mode 셀렉트 변경 시 라벨/플레이스홀더 동적 전환
+  // Push API Key: 신규 push 서버이고 키가 없으면 자동 생성
+  if (mode === 'push' && !server.pushApiKey) {
+    document.getElementById('pushApiKey').value = _generateApiKey();
+  }
+
+  // 복사 버튼
+  document.getElementById('copyApiKeyBtn').addEventListener('click', () => {
+    const key = document.getElementById('pushApiKey').value;
+    navigator.clipboard.writeText(key).then(() => alert('API Key가 복사되었습니다.'));
+  });
+
+  // 재생성 버튼
+  document.getElementById('regenApiKeyBtn').addEventListener('click', () => {
+    if (confirm('API Key를 재생성하면 기존 에이전트의 키도 변경해야 합니다. 계속하시겠습니까?')) {
+      document.getElementById('pushApiKey').value = _generateApiKey();
+    }
+  });
+
+  // mode 셀렉트 변경 시 라벨/플레이스홀더 + API Key 필드 토글
   document.getElementById('serverMode').addEventListener('change', (e) => {
     const isPush = e.target.value === 'push';
     const label = document.getElementById('instanceLabel');
     const input = document.getElementById('serverInstance');
     if (label) label.textContent = isPush ? '서버 식별자' : '인스턴스 (IP:Port)';
     if (input) input.placeholder = isPush ? '예: external-web-01' : '예: 10.0.1.10:9100';
+
+    const keyGroup = document.getElementById('pushApiKeyGroup');
+    keyGroup.style.display = isPush ? 'block' : 'none';
+    if (isPush && !document.getElementById('pushApiKey').value) {
+      document.getElementById('pushApiKey').value = _generateApiKey();
+    }
   });
+}
+
+function _generateApiKey() {
+  const arr = new Uint8Array(24);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
 }
 
 async function saveServer() {
@@ -414,6 +479,11 @@ async function saveServer() {
     description: document.getElementById('serverDescription').value.trim(),
     mode: mode,
   };
+
+  // push 모드일 때만 pushApiKey 저장
+  if (mode === 'push') {
+    serverData.pushApiKey = document.getElementById('pushApiKey').value.trim();
+  }
 
   if (!serverData.id || !serverData.name || !serverData.project || !serverData.instance) {
     alert('모든 필수 항목을 입력해주세요.');
@@ -465,10 +535,17 @@ async function saveThresholds() {
   
   console.log('Threshold values:', { cpuWarn, cpuCrit, memWarn, memCrit, diskWarn, diskCrit }); // 디버그
   
+  const cpuReqWarn = parseInt(document.getElementById('cpuRequestWarning').value);
+  const cpuReqCrit = parseInt(document.getElementById('cpuRequestCritical').value);
+  const memReqWarn = parseInt(document.getElementById('memRequestWarning').value);
+  const memReqCrit = parseInt(document.getElementById('memRequestCritical').value);
+
   serversData.defaultThresholds = {
     cpu: { warning: cpuWarn, critical: cpuCrit },
     memory: { warning: memWarn, critical: memCrit },
-    disk: { warning: diskWarn, critical: diskCrit }
+    disk: { warning: diskWarn, critical: diskCrit },
+    cpuRequest: { warning: cpuReqWarn, critical: cpuReqCrit },
+    memoryRequest: { warning: memReqWarn, critical: memReqCrit }
   };
 
   console.log('Calling saveServersData...', serversData); // 디버그

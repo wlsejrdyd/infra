@@ -1,5 +1,5 @@
 // assets/js/pages/overview.js
-import { fetchServersData, fetchServerMetricsUnified, fetchSslStatus } from '/assets/js/api.js';
+import { fetchServersData, fetchServerMetricsUnified, fetchSslStatus, fetchKubernetesPodResources } from '/assets/js/api.js';
 
 let serversData = { servers: [], defaultThresholds: {} };
 let currentFilter = 'all';
@@ -351,6 +351,28 @@ async function updateServerGrid() {
   // 모든 서버 메트릭 병렬 fetch (순차 대비 ~N배 빠름, push/pull 자동 분기)
   await Promise.all(serversData.servers.map(async (server) => {
     const metrics = await fetchServerMetricsUnified(server);
+
+    // K8s Request % 계산
+    let k8sData = null;
+    if (server.mode === 'push') {
+      k8sData = metrics.k8s || null;
+    } else {
+      // Pull 모드: kube-state-metrics에서 K8s 데이터 조회
+      try {
+        const k8sRes = await fetchKubernetesPodResources(server.instance);
+        if (k8sRes && k8sRes.nodeAllocatable) k8sData = k8sRes;
+      } catch (e) { /* K8s 없는 서버 무시 */ }
+    }
+
+    if (k8sData && k8sData.nodeAllocatable && k8sData.pods) {
+      const totalCpuReq = k8sData.pods.reduce((sum, p) => sum + (p.cpuReq || 0), 0);
+      const totalMemReq = k8sData.pods.reduce((sum, p) => sum + (p.memReq || 0), 0);
+      const allocCpu = k8sData.nodeAllocatable.cpu || 0;
+      const allocMem = k8sData.nodeAllocatable.memory || 0;
+      if (allocCpu > 0) metrics.cpuRequestPct = (totalCpuReq / allocCpu) * 100;
+      if (allocMem > 0) metrics.memRequestPct = (totalMemReq / allocMem) * 100;
+    }
+
     server._metrics = metrics;
     const status = getServerStatus(metrics, serversData.defaultThresholds);
     server._status = status;
@@ -380,6 +402,8 @@ async function updateServerGrid() {
           cpu: m.cpu != null ? m.cpu.toFixed(1) : null,
           memory: m.memory != null ? m.memory.toFixed(1) : null,
           disk: m.disk != null ? m.disk.toFixed(1) : null,
+          cpuRequest: m.cpuRequestPct != null ? m.cpuRequestPct.toFixed(1) : null,
+          memoryRequest: m.memRequestPct != null ? m.memRequestPct.toFixed(1) : null,
         });
       }
     }
@@ -588,9 +612,14 @@ function stopSliding() {
  */
 function getServerStatus(metrics, thresholds) {
   if (metrics.status === 'offline') return 'offline';
-  const { cpu, memory, disk } = metrics;
-  if ((cpu && cpu >= thresholds.cpu.critical) || (memory && memory >= thresholds.memory.critical) || (disk && disk >= thresholds.disk.critical)) return 'critical';
-  if ((cpu && cpu >= thresholds.cpu.warning) || (memory && memory >= thresholds.memory.warning) || (disk && disk >= thresholds.disk.warning)) return 'warning';
+  const { cpu, memory, disk, cpuRequestPct, memRequestPct } = metrics;
+  const cpuReqTh = thresholds.cpuRequest || { warning: 80, critical: 90 };
+  const memReqTh = thresholds.memoryRequest || { warning: 80, critical: 90 };
+
+  if ((cpu && cpu >= thresholds.cpu.critical) || (memory && memory >= thresholds.memory.critical) || (disk && disk >= thresholds.disk.critical)
+    || (cpuRequestPct != null && cpuRequestPct >= cpuReqTh.critical) || (memRequestPct != null && memRequestPct >= memReqTh.critical)) return 'critical';
+  if ((cpu && cpu >= thresholds.cpu.warning) || (memory && memory >= thresholds.memory.warning) || (disk && disk >= thresholds.disk.warning)
+    || (cpuRequestPct != null && cpuRequestPct >= cpuReqTh.warning) || (memRequestPct != null && memRequestPct >= memReqTh.warning)) return 'warning';
   return 'healthy';
 }
 

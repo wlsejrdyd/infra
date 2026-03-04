@@ -11,6 +11,14 @@
     "disk": {
       "warning": 80,
       "critical": 90
+    },
+    "cpuRequest": {
+      "warning": 80,
+      "critical": 90
+    },
+    "memoryRequest": {
+      "warning": 80,
+      "critical": 90
     }
   },
   "servers": [

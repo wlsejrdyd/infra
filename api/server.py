@@ -216,6 +216,14 @@ def handle_alert():
                     parts.append(f"DISK: {metrics['disk']}%")
                 if parts:
                     text += f"\n📊 {' | '.join(parts)}"
+                # K8s Request 정보
+                k8s_parts = []
+                if metrics.get('cpuRequest') is not None:
+                    k8s_parts.append(f"CPU Req: {metrics['cpuRequest']}%")
+                if metrics.get('memoryRequest') is not None:
+                    k8s_parts.append(f"MEM Req: {metrics['memoryRequest']}%")
+                if k8s_parts:
+                    text += f"\n☸️ K8s {' | '.join(k8s_parts)}"
 
             ts = _slack_post_message(SLACK_CHANNEL, text)
             if ts:
@@ -393,19 +401,35 @@ def _save_push_metrics(data):
 
 @app.route('/api/push/metrics', methods=['POST'])
 def receive_push_metrics():
-    """에이전트로부터 메트릭 수신 (X-Api-Key 인증)"""
-    if not PUSH_API_KEY:
-        return jsonify({'error': 'Push API key not configured'}), 503
-
-    api_key = request.headers.get('X-Api-Key', '')
-    if api_key != PUSH_API_KEY:
-        return jsonify({'error': 'Unauthorized'}), 401
-
+    """에이전트로부터 메트릭 수신 (서버별 pushApiKey 또는 마스터 PUSH_API_KEY 인증)"""
     body = request.get_json()
     if not body or not body.get('serverId'):
         return jsonify({'error': 'serverId is required'}), 400
 
     server_id = body['serverId']
+    api_key = request.headers.get('X-Api-Key', '')
+
+    # 서버별 pushApiKey 조회
+    server_push_key = ''
+    try:
+        with open(SERVERS_FILE, 'r', encoding='utf-8') as f:
+            servers_data = json.load(f)
+        for srv in servers_data.get('servers', []):
+            if srv.get('id') == server_id:
+                server_push_key = srv.get('pushApiKey', '')
+                break
+    except Exception:
+        pass
+
+    # 인증: 서버별 키 → 마스터 키 순서로 확인
+    if server_push_key:
+        if api_key != server_push_key:
+            return jsonify({'error': 'Unauthorized'}), 401
+    elif PUSH_API_KEY:
+        if api_key != PUSH_API_KEY:
+            return jsonify({'error': 'Unauthorized'}), 401
+    else:
+        return jsonify({'error': 'Push API key not configured'}), 503
 
     with _push_lock:
         store = _load_push_metrics()
