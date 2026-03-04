@@ -684,14 +684,8 @@ export async function fetchKubernetesPodResources(instance) {
         const match = nodeInfoRes.data.result.find(r => r.metric.internal_ip === serverIp);
         if (match) nodeName = match.metric.node;
       }
-      // 방법3: localhost → Prometheus가 실행 중인 노드 (node_exporter IP와 K8s 노드 IP 비교)
-      if (!nodeName && (serverIp === 'localhost' || serverIp === '127.0.0.1')) {
-        if (addrRes?.status === 'success' && addrRes.data.result.length > 0) {
-          nodeName = addrRes.data.result[0].metric.node;
-        } else if (nodeInfoRes?.status === 'success' && nodeInfoRes.data.result.length > 0) {
-          nodeName = nodeInfoRes.data.result[0].metric.node;
-        }
-      }
+      // localhost/127.0.0.1은 K8s 노드 매칭 불가 → 스킵
+      // (Prometheus 서버 자체가 K8s 노드가 아닌 경우 잘못된 노드를 매칭하는 문제 방지)
     }
 
     // 이 서버가 K8s 노드가 아니면 빈 결과 반환 (→ SYSTEM INFO fallback)
