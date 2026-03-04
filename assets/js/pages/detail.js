@@ -514,8 +514,9 @@ async function updateServerData(server) {
         const fmtCpu = (cores) => cores >= 1 ? `${cores.toFixed(1)}c` : `${Math.round(cores * 1000)}m`;
 
         const alloc = k8sRes.nodeAllocatable;
-        const totalCpuReq = k8sRes.pods.reduce((s, p) => s + p.cpuReq, 0);
-        const totalMemReq = k8sRes.pods.reduce((s, p) => s + p.memReq, 0);
+        const activePods = k8sRes.pods.filter(p => p.phase === 'Running' || p.phase === 'Pending');
+        const totalCpuReq = activePods.reduce((s, p) => s + p.cpuReq, 0);
+        const totalMemReq = activePods.reduce((s, p) => s + p.memReq, 0);
         let html = `
           <div style="display:flex;gap:1rem;padding:0 0 0.5rem;border-bottom:1px solid var(--border);margin-bottom:0.4rem;flex-wrap:wrap;">
             <span style="font-size:0.75rem;"><span style="color:var(--success);font-weight:700;">${k8sRes.summary.running}</span> <span style="color:var(--text-muted);">Running</span></span>
