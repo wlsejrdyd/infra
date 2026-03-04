@@ -1,10 +1,24 @@
 {
   "defaultThresholds": {
     "cpu": {
-      "critical": 80,
-      "warning": 71
+      "warning": 70,
+      "critical": 80
+    },
+    "memory": {
+      "warning": 70,
+      "critical": 80
     },
     "disk": {
+      "warning": 80,
+      "critical": 90
+    },
+    "cpuRequest": {
+      "warning": 80,
+      "critical": 90
+    },
+    "memoryRequest": {
+      "warning": 80,
+      "critical": 90
     }
   },
   "servers": [
