@@ -815,3 +815,68 @@ export async function fetchSystemInfo(instance) {
   }
   return info;
 }
+
+
+// ──────────────────────────────────
+// Push 모드 메트릭 조회
+// ──────────────────────────────────
+
+async function fetchPushMetrics(serverId) {
+  try {
+    const res = await fetch(`/api/push/metrics/${encodeURIComponent(serverId)}`);
+    return await res.json();
+  } catch (e) {
+    console.error(`Push metrics fetch error for ${serverId}:`, e);
+    return { cpu: null, memory: null, disk: null, uptime: null, status: 'offline' };
+  }
+}
+
+/**
+ * 통합 메트릭 조회 — server.mode에 따라 push/pull 자동 분기
+ */
+export async function fetchServerMetricsUnified(server) {
+  if (server.mode === 'push') {
+    return await fetchPushMetrics(server.id);
+  }
+  return await fetchServerMetrics(server.instance);
+}
+
+
+// ──────────────────────────────────
+// SSL 인증서 관련 API
+// ──────────────────────────────────
+
+export async function fetchSslDomains() {
+  try {
+    const res = await fetch('/api/ssl/domains');
+    return await res.json();
+  } catch (e) {
+    console.error('Failed to fetch SSL domains:', e);
+    return { sslThresholds: { warning: 30, critical: 7 }, domains: [] };
+  }
+}
+
+export async function saveSslDomains(data) {
+  try {
+    const res = await fetch('/api/ssl/domains', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const result = await res.json();
+    return res.ok && result.success;
+  } catch (e) {
+    console.error('Failed to save SSL domains:', e);
+    return false;
+  }
+}
+
+export async function fetchSslStatus() {
+  try {
+    const res = await fetch('/api/ssl/check-all');
+    return await res.json();
+  } catch (e) {
+    console.error('Failed to fetch SSL status:', e);
+    return { thresholds: {}, results: [] };
+  }
+}

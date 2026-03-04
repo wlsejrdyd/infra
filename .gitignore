@@ -38,6 +38,7 @@ application-secret.yml
 # Alert state & config (runtime generated)
 alert_state.json
 alert_config.json
+push_metrics.json
 
 # Uploads
 /uploads/

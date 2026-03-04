@@ -1,6 +1,6 @@
 // assets/js/pages/detail.js
 import {
-  fetchServerMetrics,
+  fetchServerMetricsUnified,
   fetchCpuHistory,
   fetchMemoryHistory,
   fetchNetworkTraffic,
@@ -203,10 +203,11 @@ export async function renderDetail(params) {
 }
 
 async function updateServerData(server) {
-  const metrics = await fetchServerMetrics(server.instance);
-  const networkTraffic = await fetchNetworkTraffic(server.instance);
-  const diskIO = await fetchDiskIO(server.instance);
-  const loadAvg = await fetchLoadAverage(server.instance);
+  const isPush = server.mode === 'push';
+  const metrics = await fetchServerMetricsUnified(server);
+  const networkTraffic = isPush ? (metrics.network || { inbound: null, outbound: null }) : await fetchNetworkTraffic(server.instance);
+  const diskIO = isPush ? (metrics.diskIO || { read: null, write: null }) : await fetchDiskIO(server.instance);
+  const loadAvg = isPush ? (metrics.loadAverage || { load1: null, load5: null, load15: null }) : await fetchLoadAverage(server.instance);
 
   // 상태 표시
   const statusEl = document.getElementById('serverStatus');
@@ -287,83 +288,85 @@ async function updateServerData(server) {
     document.getElementById('load15').textContent = loadAvg.load15.toFixed(2);
   }
 
-  // MinIO / Longhorn 스토리지
-  const minio = await fetchMinioCapacity();
-  const longhorn = await fetchLonghornCapacity();
-  let showStorage = false;
+  // MinIO / Longhorn 스토리지 (pull 모드 전용)
+  if (!isPush) {
+    const minio = await fetchMinioCapacity();
+    const longhorn = await fetchLonghornCapacity();
+    let showStorage = false;
 
-  if (minio.total !== null) {
-    showStorage = true;
-    const minioCard = document.getElementById('minioCard');
-    const minioContent = document.getElementById('minioContent');
-    if (minioCard && minioContent) {
-      minioCard.style.display = '';
-      const pct = minio.usagePercent.toFixed(1);
-      const color = minio.usagePercent >= 90 ? 'var(--danger)' : minio.usagePercent >= 80 ? 'var(--warning)' : 'var(--success)';
-      let html = `
-        <div style="margin-bottom: 1rem;">
-          <div style="display: flex; justify-content: space-between; margin-bottom: 0.35rem;">
-            <span style="font-size: 0.9rem;">Cluster</span>
-            <span style="font-weight: 600; color: ${color};">${pct}% (${formatBytes(minio.used)} / ${formatBytes(minio.total)})</span>
-          </div>
-          <div class="progress-bar" style="height: 6px;">
-            <div class="progress-fill" style="width: ${pct}%; background: ${color};"></div>
-          </div>
-        </div>
-      `;
-      if (minio.buckets.length > 0) {
-        html += `<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Buckets</div>`;
-        minio.buckets.forEach(b => {
-          html += `<div style="display: flex; justify-content: space-between; font-size: 0.85rem; padding: 0.25rem 0;">
-            <span>${b.name}</span><span style="color: var(--text-muted);">${formatBytes(b.size)}</span>
-          </div>`;
-        });
-      }
-      minioContent.innerHTML = html;
-    }
-  }
-
-  if (longhorn.nodes.length > 0) {
-    showStorage = true;
-    const lhCard = document.getElementById('longhornCard');
-    const lhContent = document.getElementById('longhornContent');
-    if (lhCard && lhContent) {
-      lhCard.style.display = '';
-      let html = '';
-      longhorn.nodes.forEach(node => {
-        const pct = node.usagePercent.toFixed(1);
-        const color = node.usagePercent >= 90 ? 'var(--danger)' : node.usagePercent >= 80 ? 'var(--warning)' : 'var(--success)';
-        html += `
-          <div style="margin-bottom: 0.75rem;">
+    if (minio.total !== null) {
+      showStorage = true;
+      const minioCard = document.getElementById('minioCard');
+      const minioContent = document.getElementById('minioContent');
+      if (minioCard && minioContent) {
+        minioCard.style.display = '';
+        const pct = minio.usagePercent.toFixed(1);
+        const color = minio.usagePercent >= 90 ? 'var(--danger)' : minio.usagePercent >= 80 ? 'var(--warning)' : 'var(--success)';
+        let html = `
+          <div style="margin-bottom: 1rem;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 0.35rem;">
-              <span style="font-size: 0.85rem;">${node.name}</span>
-              <span style="font-size: 0.85rem; font-weight: 600; color: ${color};">${pct}% (${formatBytes(node.used)} / ${formatBytes(node.capacity)})</span>
+              <span style="font-size: 0.9rem;">Cluster</span>
+              <span style="font-weight: 600; color: ${color};">${pct}% (${formatBytes(minio.used)} / ${formatBytes(minio.total)})</span>
             </div>
             <div class="progress-bar" style="height: 6px;">
               <div class="progress-fill" style="width: ${pct}%; background: ${color};"></div>
             </div>
           </div>
         `;
-      });
-      if (longhorn.volumes.length > 0) {
-        html += `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.75rem; margin-bottom: 0.5rem;">Volumes</div>`;
-        longhorn.volumes.forEach(v => {
-          html += `<div style="display: flex; justify-content: space-between; font-size: 0.85rem; padding: 0.25rem 0;">
-            <span>${v.name}</span><span style="color: var(--text-muted);">${formatBytes(v.size)}</span>
-          </div>`;
-        });
+        if (minio.buckets.length > 0) {
+          html += `<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Buckets</div>`;
+          minio.buckets.forEach(b => {
+            html += `<div style="display: flex; justify-content: space-between; font-size: 0.85rem; padding: 0.25rem 0;">
+              <span>${b.name}</span><span style="color: var(--text-muted);">${formatBytes(b.size)}</span>
+            </div>`;
+          });
+        }
+        minioContent.innerHTML = html;
       }
-      lhContent.innerHTML = html;
+    }
+
+    if (longhorn.nodes.length > 0) {
+      showStorage = true;
+      const lhCard = document.getElementById('longhornCard');
+      const lhContent = document.getElementById('longhornContent');
+      if (lhCard && lhContent) {
+        lhCard.style.display = '';
+        let html = '';
+        longhorn.nodes.forEach(node => {
+          const pct = node.usagePercent.toFixed(1);
+          const color = node.usagePercent >= 90 ? 'var(--danger)' : node.usagePercent >= 80 ? 'var(--warning)' : 'var(--success)';
+          html += `
+            <div style="margin-bottom: 0.75rem;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 0.35rem;">
+                <span style="font-size: 0.85rem;">${node.name}</span>
+                <span style="font-size: 0.85rem; font-weight: 600; color: ${color};">${pct}% (${formatBytes(node.used)} / ${formatBytes(node.capacity)})</span>
+              </div>
+              <div class="progress-bar" style="height: 6px;">
+                <div class="progress-fill" style="width: ${pct}%; background: ${color};"></div>
+              </div>
+            </div>
+          `;
+        });
+        if (longhorn.volumes.length > 0) {
+          html += `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.75rem; margin-bottom: 0.5rem;">Volumes</div>`;
+          longhorn.volumes.forEach(v => {
+            html += `<div style="display: flex; justify-content: space-between; font-size: 0.85rem; padding: 0.25rem 0;">
+              <span>${v.name}</span><span style="color: var(--text-muted);">${formatBytes(v.size)}</span>
+            </div>`;
+          });
+        }
+        lhContent.innerHTML = html;
+      }
+    }
+
+    const storageSection = document.getElementById('storageSection');
+    if (storageSection && showStorage) {
+      storageSection.style.display = '';
     }
   }
 
-  const storageSection = document.getElementById('storageSection');
-  if (storageSection && showStorage) {
-    storageSection.style.display = '';
-  }
-
   // 전체 디스크 표시
-  const allDisks = await fetchAllDisks(server.instance);
+  const allDisks = isPush ? (metrics.filesystems || []) : await fetchAllDisks(server.instance);
   const disksContainer = document.getElementById('allDisksContainer');
   if (disksContainer && allDisks.length > 0) {
     disksContainer.innerHTML = allDisks
@@ -389,36 +392,18 @@ async function updateServerData(server) {
     disksContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem;">디스크 정보 없음</div>';
   }
 
-  // Top Processes → Kubernetes Resources → System Info (fallback 순서)
-  const processes = await fetchTopProcesses(server.instance);
+  // Top Processes / System Info
   const procContainer = document.getElementById('topProcessContainer');
   const titleEl = document.getElementById('infoCardTitle');
   const iconEl = document.getElementById('infoCardIcon');
 
-  if (procContainer && processes.length > 0) {
-    // 1순위: process-exporter 데이터 있음 → 프로세스 목록
-    if (titleEl) titleEl.textContent = 'TOP PROCESSES (CPU)';
-    if (iconEl) iconEl.textContent = '📊';
-    procContainer.innerHTML = `
-      <div style="display:flex;justify-content:space-between;padding:0 0 0.4rem;border-bottom:1px solid var(--border);margin-bottom:0.3rem;">
-        <span style="font-size:0.7rem;color:var(--text-muted);font-weight:600;flex:1;">PROCESS</span>
-        <span style="font-size:0.7rem;color:var(--text-muted);font-weight:600;min-width:65px;text-align:right;">CPU</span>
-        <span style="font-size:0.7rem;color:var(--text-muted);font-weight:600;min-width:75px;text-align:right;">MEM</span>
-      </div>
-    ` + processes.map((p, i) => {
-      const cpuColor = p.cpu >= 50 ? 'var(--danger)' : p.cpu >= 20 ? 'var(--warning)' : 'var(--text-primary)';
-      return `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.3rem 0;${i < processes.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.03);' : ''}">
-          <span style="font-size:0.82rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.name}">${p.name}</span>
-          <span style="font-size:0.82rem;font-weight:600;min-width:65px;text-align:right;color:${cpuColor};">${p.cpu.toFixed(1)}%</span>
-          <span style="font-size:0.82rem;min-width:75px;text-align:right;color:var(--text-muted);">${formatBytes(p.memory)}</span>
-        </div>`;
-    }).join('');
-  } else if (procContainer) {
-    // 2순위: kube-state-metrics 데이터 시도 (서버 IP → 해당 노드 Pod만)
-    const k8sRes = await fetchKubernetesPodResources(server.instance);
-    if (k8sRes.pods.length > 0) {
-      if (titleEl) titleEl.textContent = `KUBERNETES — ${k8sRes.nodeName || 'CLUSTER'}`;
+  if (isPush) {
+    // Push 모드: K8s 데이터 우선, 없으면 프로세스 목록
+    const k8sData = metrics.k8s;
+
+    if (k8sData && k8sData.pods && k8sData.pods.length > 0 && procContainer) {
+      // K8s Pod 리소스 표시
+      if (titleEl) titleEl.textContent = `KUBERNETES — ${k8sData.nodeName || 'NODE'}`;
       if (iconEl) iconEl.textContent = '☸️';
 
       const phaseColor = (phase) => {
@@ -428,16 +413,15 @@ async function updateServerData(server) {
       };
       const fmtCpu = (cores) => cores >= 1 ? `${cores.toFixed(1)}c` : `${Math.round(cores * 1000)}m`;
 
-      // 요약 헤더
-      const alloc = k8sRes.nodeAllocatable;
-      const totalCpuReq = k8sRes.pods.reduce((s, p) => s + p.cpuReq, 0);
-      const totalMemReq = k8sRes.pods.reduce((s, p) => s + p.memReq, 0);
+      const alloc = k8sData.nodeAllocatable;
+      const totalCpuReq = k8sData.pods.reduce((s, p) => s + p.cpuReq, 0);
+      const totalMemReq = k8sData.pods.reduce((s, p) => s + p.memReq, 0);
       let html = `
         <div style="display:flex;gap:1rem;padding:0 0 0.5rem;border-bottom:1px solid var(--border);margin-bottom:0.4rem;flex-wrap:wrap;">
-          <span style="font-size:0.75rem;"><span style="color:var(--success);font-weight:700;">${k8sRes.summary.running}</span> <span style="color:var(--text-muted);">Running</span></span>
-          <span style="font-size:0.75rem;"><span style="color:var(--warning);font-weight:700;">${k8sRes.summary.pending}</span> <span style="color:var(--text-muted);">Pending</span></span>
-          <span style="font-size:0.75rem;"><span style="color:var(--danger);font-weight:700;">${k8sRes.summary.failed}</span> <span style="color:var(--text-muted);">Failed</span></span>
-          <span style="font-size:0.75rem;color:var(--text-muted);">Total <strong style="color:var(--text-primary);">${k8sRes.summary.total}</strong></span>
+          <span style="font-size:0.75rem;"><span style="color:var(--success);font-weight:700;">${k8sData.summary.running}</span> <span style="color:var(--text-muted);">Running</span></span>
+          <span style="font-size:0.75rem;"><span style="color:var(--warning);font-weight:700;">${k8sData.summary.pending}</span> <span style="color:var(--text-muted);">Pending</span></span>
+          <span style="font-size:0.75rem;"><span style="color:var(--danger);font-weight:700;">${k8sData.summary.failed}</span> <span style="color:var(--text-muted);">Failed</span></span>
+          <span style="font-size:0.75rem;color:var(--text-muted);">Total <strong style="color:var(--text-primary);">${k8sData.summary.total}</strong></span>
           ${alloc ? `<span style="font-size:0.7rem;color:var(--text-muted);margin-left:auto;">CPU ${fmtCpu(totalCpuReq)}/${fmtCpu(alloc.cpu)} · MEM ${formatBytes(totalMemReq)}/${formatBytes(alloc.memory)}</span>` : ''}
         </div>
         <div style="display:flex;justify-content:space-between;padding:0 0 0.3rem;margin-bottom:0.2rem;">
@@ -448,11 +432,10 @@ async function updateServerData(server) {
         </div>
       `;
 
-      // Pod 목록
-      k8sRes.pods.forEach((pod, i) => {
+      k8sData.pods.forEach((pod, i) => {
         const shortName = pod.name.length > 30 ? pod.name.substring(0, 28) + '…' : pod.name;
         html += `
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:0.25rem 0;${i < k8sRes.pods.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.03);' : ''}">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:0.25rem 0;${i < k8sData.pods.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.03);' : ''}">
             <span style="font-size:0.78rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${pod.namespace}/${pod.name}">
               <span style="color:var(--text-muted);font-size:0.7rem;">${pod.namespace}/</span>${shortName}
             </span>
@@ -464,30 +447,183 @@ async function updateServerData(server) {
 
       procContainer.innerHTML = html;
     } else {
-      // 3순위: fallback → 시스템 정보
-      if (titleEl) titleEl.textContent = 'SYSTEM INFO';
-      if (iconEl) iconEl.textContent = '🖥️';
-      const sysInfo = await fetchSystemInfo(server.instance);
-      const row = (label, value) => `
-        <div style="display:flex;justify-content:space-between;padding:0.35rem 0;border-bottom:1px solid rgba(255,255,255,0.03);">
-          <span style="font-size:0.82rem;color:var(--text-muted);">${label}</span>
-          <span style="font-size:0.82rem;font-weight:600;">${value ?? '--'}</span>
-        </div>`;
-      procContainer.innerHTML =
-        row('Hostname', sysInfo.hostname) +
-        row('OS / Arch', `${sysInfo.os ?? '--'} ${sysInfo.machine ?? ''}`) +
-        row('Kernel', sysInfo.kernel) +
-        row('Running Procs', sysInfo.procsRunning != null ? Math.round(sysInfo.procsRunning) : '--') +
-        row('Blocked Procs', sysInfo.procsBlocked != null ? Math.round(sysInfo.procsBlocked) : '--') +
-        row('Open FDs', sysInfo.fileDescriptors != null ? Math.round(sysInfo.fileDescriptors).toLocaleString() : '--') +
-        row('Entropy', sysInfo.entropy != null ? Math.round(sysInfo.entropy).toLocaleString() : '--') +
-        row('Context Switches', sysInfo.contextSwitches != null ? `${(sysInfo.contextSwitches / 1000).toFixed(1)}K/s` : '--');
+      // K8s 없으면 프로세스 목록
+      const pushProcs = metrics.processes || [];
+      if (procContainer && pushProcs.length > 0) {
+        if (titleEl) titleEl.textContent = 'TOP PROCESSES (CPU)';
+        if (iconEl) iconEl.textContent = '📊';
+        procContainer.innerHTML = `
+          <div style="display:flex;justify-content:space-between;padding:0 0 0.4rem;border-bottom:1px solid var(--border);margin-bottom:0.3rem;">
+            <span style="font-size:0.7rem;color:var(--text-muted);font-weight:600;flex:1;">PROCESS</span>
+            <span style="font-size:0.7rem;color:var(--text-muted);font-weight:600;min-width:65px;text-align:right;">CPU</span>
+            <span style="font-size:0.7rem;color:var(--text-muted);font-weight:600;min-width:75px;text-align:right;">MEM</span>
+          </div>
+        ` + pushProcs.map((p, i) => {
+          const cpuColor = p.cpu >= 50 ? 'var(--danger)' : p.cpu >= 20 ? 'var(--warning)' : 'var(--text-primary)';
+          return `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:0.3rem 0;${i < pushProcs.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.03);' : ''}">
+              <span style="font-size:0.82rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.name}">${p.name}</span>
+              <span style="font-size:0.82rem;font-weight:600;min-width:65px;text-align:right;color:${cpuColor};">${p.cpu.toFixed(1)}%</span>
+              <span style="font-size:0.82rem;min-width:75px;text-align:right;color:var(--text-muted);">${formatBytes(p.memory)}</span>
+            </div>`;
+        }).join('');
+      } else if (procContainer) {
+        if (titleEl) titleEl.textContent = 'PUSH MODE';
+        if (iconEl) iconEl.textContent = '📡';
+        const lastUpdated = metrics.lastUpdated ? new Date(metrics.lastUpdated).toLocaleString() : '--';
+        procContainer.innerHTML = `
+          <div style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem 0;">
+            <div style="margin-bottom: 0.5rem;">이 서버는 <strong style="color:var(--accent);">Push 에이전트</strong> 방식으로 모니터링됩니다.</div>
+            <div>마지막 수신: <strong>${lastUpdated}</strong></div>
+          </div>`;
+      }
+    }
+  } else {
+    // Pull 모드: Prometheus 기반 fallback 체인
+    const processes = await fetchTopProcesses(server.instance);
+    if (procContainer && processes.length > 0) {
+      if (titleEl) titleEl.textContent = 'TOP PROCESSES (CPU)';
+      if (iconEl) iconEl.textContent = '📊';
+      procContainer.innerHTML = `
+        <div style="display:flex;justify-content:space-between;padding:0 0 0.4rem;border-bottom:1px solid var(--border);margin-bottom:0.3rem;">
+          <span style="font-size:0.7rem;color:var(--text-muted);font-weight:600;flex:1;">PROCESS</span>
+          <span style="font-size:0.7rem;color:var(--text-muted);font-weight:600;min-width:65px;text-align:right;">CPU</span>
+          <span style="font-size:0.7rem;color:var(--text-muted);font-weight:600;min-width:75px;text-align:right;">MEM</span>
+        </div>
+      ` + processes.map((p, i) => {
+        const cpuColor = p.cpu >= 50 ? 'var(--danger)' : p.cpu >= 20 ? 'var(--warning)' : 'var(--text-primary)';
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:0.3rem 0;${i < processes.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.03);' : ''}">
+            <span style="font-size:0.82rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.name}">${p.name}</span>
+            <span style="font-size:0.82rem;font-weight:600;min-width:65px;text-align:right;color:${cpuColor};">${p.cpu.toFixed(1)}%</span>
+            <span style="font-size:0.82rem;min-width:75px;text-align:right;color:var(--text-muted);">${formatBytes(p.memory)}</span>
+          </div>`;
+      }).join('');
+    } else if (procContainer) {
+      const k8sRes = await fetchKubernetesPodResources(server.instance);
+      if (k8sRes.pods.length > 0) {
+        if (titleEl) titleEl.textContent = `KUBERNETES — ${k8sRes.nodeName || 'CLUSTER'}`;
+        if (iconEl) iconEl.textContent = '☸️';
+
+        const phaseColor = (phase) => {
+          if (phase === 'Running') return 'var(--success)';
+          if (phase === 'Pending') return 'var(--warning)';
+          return 'var(--danger)';
+        };
+        const fmtCpu = (cores) => cores >= 1 ? `${cores.toFixed(1)}c` : `${Math.round(cores * 1000)}m`;
+
+        const alloc = k8sRes.nodeAllocatable;
+        const totalCpuReq = k8sRes.pods.reduce((s, p) => s + p.cpuReq, 0);
+        const totalMemReq = k8sRes.pods.reduce((s, p) => s + p.memReq, 0);
+        let html = `
+          <div style="display:flex;gap:1rem;padding:0 0 0.5rem;border-bottom:1px solid var(--border);margin-bottom:0.4rem;flex-wrap:wrap;">
+            <span style="font-size:0.75rem;"><span style="color:var(--success);font-weight:700;">${k8sRes.summary.running}</span> <span style="color:var(--text-muted);">Running</span></span>
+            <span style="font-size:0.75rem;"><span style="color:var(--warning);font-weight:700;">${k8sRes.summary.pending}</span> <span style="color:var(--text-muted);">Pending</span></span>
+            <span style="font-size:0.75rem;"><span style="color:var(--danger);font-weight:700;">${k8sRes.summary.failed}</span> <span style="color:var(--text-muted);">Failed</span></span>
+            <span style="font-size:0.75rem;color:var(--text-muted);">Total <strong style="color:var(--text-primary);">${k8sRes.summary.total}</strong></span>
+            ${alloc ? `<span style="font-size:0.7rem;color:var(--text-muted);margin-left:auto;">CPU ${fmtCpu(totalCpuReq)}/${fmtCpu(alloc.cpu)} · MEM ${formatBytes(totalMemReq)}/${formatBytes(alloc.memory)}</span>` : ''}
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:0 0 0.3rem;margin-bottom:0.2rem;">
+            <span style="font-size:0.68rem;color:var(--text-muted);font-weight:600;flex:1;">POD</span>
+            <span style="font-size:0.68rem;color:var(--text-muted);font-weight:600;min-width:50px;text-align:right;">CPU REQ</span>
+            <span style="font-size:0.68rem;color:var(--text-muted);font-weight:600;min-width:65px;text-align:right;">MEM REQ</span>
+            <span style="font-size:0.68rem;color:var(--text-muted);font-weight:600;min-width:18px;text-align:center;">⬤</span>
+          </div>
+        `;
+
+        k8sRes.pods.forEach((pod, i) => {
+          const shortName = pod.name.length > 30 ? pod.name.substring(0, 28) + '…' : pod.name;
+          html += `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:0.25rem 0;${i < k8sRes.pods.length - 1 ? 'border-bottom:1px solid rgba(255,255,255,0.03);' : ''}">
+              <span style="font-size:0.78rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${pod.namespace}/${pod.name}">
+                <span style="color:var(--text-muted);font-size:0.7rem;">${pod.namespace}/</span>${shortName}
+              </span>
+              <span style="font-size:0.78rem;min-width:50px;text-align:right;font-weight:600;">${pod.cpuReq > 0 ? fmtCpu(pod.cpuReq) : '-'}</span>
+              <span style="font-size:0.78rem;min-width:65px;text-align:right;color:var(--text-muted);">${pod.memReq > 0 ? formatBytes(pod.memReq) : '-'}</span>
+              <span style="font-size:0.5rem;min-width:18px;text-align:center;color:${phaseColor(pod.phase)};">⬤</span>
+            </div>`;
+        });
+
+        procContainer.innerHTML = html;
+      } else {
+        if (titleEl) titleEl.textContent = 'SYSTEM INFO';
+        if (iconEl) iconEl.textContent = '🖥️';
+        const sysInfo = await fetchSystemInfo(server.instance);
+        const row = (label, value) => `
+          <div style="display:flex;justify-content:space-between;padding:0.35rem 0;border-bottom:1px solid rgba(255,255,255,0.03);">
+            <span style="font-size:0.82rem;color:var(--text-muted);">${label}</span>
+            <span style="font-size:0.82rem;font-weight:600;">${value ?? '--'}</span>
+          </div>`;
+        procContainer.innerHTML =
+          row('Hostname', sysInfo.hostname) +
+          row('OS / Arch', `${sysInfo.os ?? '--'} ${sysInfo.machine ?? ''}`) +
+          row('Kernel', sysInfo.kernel) +
+          row('Running Procs', sysInfo.procsRunning != null ? Math.round(sysInfo.procsRunning) : '--') +
+          row('Blocked Procs', sysInfo.procsBlocked != null ? Math.round(sysInfo.procsBlocked) : '--') +
+          row('Open FDs', sysInfo.fileDescriptors != null ? Math.round(sysInfo.fileDescriptors).toLocaleString() : '--') +
+          row('Entropy', sysInfo.entropy != null ? Math.round(sysInfo.entropy).toLocaleString() : '--') +
+          row('Context Switches', sysInfo.contextSwitches != null ? `${(sysInfo.contextSwitches / 1000).toFixed(1)}K/s` : '--');
+      }
     }
   }
 
-  // 차트 생성 (첫 실행 시에만)
-  if (!cpuChart) {
+  // 차트 생성
+  if (isPush) {
+    const history = metrics.history || [];
+    if (!cpuChart && history.length > 1) {
+      createChartsFromHistory(history);
+    } else if (cpuChart) {
+      updateChartsFromHistory(history);
+    }
+  } else if (!cpuChart) {
     await createCharts(server.instance);
+  }
+}
+
+function createChartsFromHistory(history) {
+  const labels = history.map(h => new Date(h.timestamp).toLocaleTimeString());
+  const cpuData = history.map(h => h.cpu);
+  const memData = history.map(h => h.memory);
+
+  const chartOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, max: 100, ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+      x: { ticks: { color: '#9ca3af', maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.05)' } }
+    }
+  };
+
+  const cpuCtx = document.getElementById('cpuChart').getContext('2d');
+  cpuChart = new Chart(cpuCtx, {
+    type: 'line',
+    data: { labels, datasets: [{ label: 'CPU %', data: cpuData, borderColor: 'rgba(59, 130, 246, 1)', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4, fill: true }] },
+    options: chartOpts
+  });
+
+  const memCtx = document.getElementById('memoryChart').getContext('2d');
+  memoryChart = new Chart(memCtx, {
+    type: 'line',
+    data: { labels, datasets: [{ label: 'Memory %', data: memData, borderColor: 'rgba(236, 72, 153, 1)', backgroundColor: 'rgba(236, 72, 153, 0.1)', tension: 0.4, fill: true }] },
+    options: chartOpts
+  });
+}
+
+function updateChartsFromHistory(history) {
+  if (!history || history.length === 0) return;
+  const labels = history.map(h => new Date(h.timestamp).toLocaleTimeString());
+
+  if (cpuChart) {
+    cpuChart.data.labels = labels;
+    cpuChart.data.datasets[0].data = history.map(h => h.cpu);
+    cpuChart.update('none');
+  }
+  if (memoryChart) {
+    memoryChart.data.labels = labels;
+    memoryChart.data.datasets[0].data = history.map(h => h.memory);
+    memoryChart.update('none');
   }
 }
 

@@ -1,0 +1,6 @@
+{
+  "server_url": "https://infra.deok.kr/api/push/metrics",
+  "server_id": "CHANGE_ME",
+  "api_key": "CHANGE_ME",
+  "interval": 30
+}

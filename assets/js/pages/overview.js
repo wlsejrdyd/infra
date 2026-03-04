@@ -1,5 +1,5 @@
 // assets/js/pages/overview.js
-import { fetchServersData, fetchServerMetrics } from '/assets/js/api.js';
+import { fetchServersData, fetchServerMetricsUnified, fetchSslStatus } from '/assets/js/api.js';
 
 let serversData = { servers: [], defaultThresholds: {} };
 let currentFilter = 'all';
@@ -197,6 +197,8 @@ export async function renderOverview() {
         </div>
       </div>
 
+      <div class="ssl-status-bar" id="sslStatusBar" style="display:none;padding:0 1rem;"></div>
+
       <div class="overview-content">
         <div class="pinned-section" id="pinnedSection">
           <div class="section-label">🔴 주의 필요 — 고정 표시</div>
@@ -271,6 +273,7 @@ export async function renderOverview() {
 
   // 초기 렌더링
   await updateServerGrid();
+  updateSslStatusBar();
   startAutoUpdate();
 }
 
@@ -345,9 +348,9 @@ function applySlidePos(newPos) {
 async function updateServerGrid() {
   const stats = { healthy: 0, warning: 0, critical: 0, offline: 0 };
 
-  // 모든 서버 메트릭 병렬 fetch (순차 대비 ~N배 빠름)
+  // 모든 서버 메트릭 병렬 fetch (순차 대비 ~N배 빠름, push/pull 자동 분기)
   await Promise.all(serversData.servers.map(async (server) => {
-    const metrics = await fetchServerMetrics(server.instance);
+    const metrics = await fetchServerMetricsUnified(server);
     server._metrics = metrics;
     const status = getServerStatus(metrics, serversData.defaultThresholds);
     server._status = status;
@@ -591,9 +594,16 @@ function getServerStatus(metrics, thresholds) {
   return 'healthy';
 }
 
+let _sslCheckCounter = 0;
+
 function startAutoUpdate() {
   if (updateInterval) clearInterval(updateInterval);
-  updateInterval = setInterval(() => updateServerGrid(), 10000);
+  updateInterval = setInterval(() => {
+    updateServerGrid();
+    // SSL은 6주기(60초)마다 체크 (TLS 핸드셰이크 부하 경감)
+    _sslCheckCounter++;
+    if (_sslCheckCounter % 6 === 0) updateSslStatusBar();
+  }, 10000);
 }
 
 /**
@@ -622,6 +632,61 @@ export function setOverviewStatusFilter(status) {
     s.classList.toggle('active', s.dataset.status === currentStatusFilter);
   });
   renderServerGrid();
+}
+
+/**
+ * SSL 인증서 상태 바 렌더링
+ */
+let _previousSslStatusMap = {};
+
+async function updateSslStatusBar() {
+  const bar = document.getElementById('sslStatusBar');
+  if (!bar) return;
+
+  const data = await fetchSslStatus();
+  const results = data.results || [];
+  if (results.length === 0) {
+    bar.style.display = 'none';
+    return;
+  }
+
+  bar.style.display = 'flex';
+  bar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 1rem;flex-wrap:wrap;';
+
+  const label = '<span style="font-size:0.75rem;color:var(--text-muted);margin-right:4px;">🔒 SSL</span>';
+
+  const pills = results.map(r => {
+    const colorMap = {
+      healthy: 'var(--success)',
+      warning: 'var(--warning)',
+      critical: 'var(--danger)',
+      expired: 'var(--danger)',
+      error: 'var(--text-muted)',
+    };
+    const color = colorMap[r.status] || 'var(--text-muted)';
+    const days = r.daysRemaining != null ? `${r.daysRemaining}d` : r.status;
+    const title = r.notAfter ? `만료: ${r.notAfter} (${r.daysRemaining}일 남음)\n발급: ${r.issuer}` : (r.error || r.status);
+
+    return `<span style="font-size:0.7rem;padding:2px 8px;border-radius:10px;border:1px solid ${color};color:${color};cursor:default;white-space:nowrap;" title="${title}">${r.domain} ${days}</span>`;
+  }).join('');
+
+  bar.innerHTML = label + pills;
+
+  // SSL 알림: 상태 변화 감지
+  for (const r of results) {
+    const prev = _previousSslStatusMap[r.id];
+    const curr = r.status;
+    if (prev && prev !== curr && (curr === 'warning' || curr === 'critical' || curr === 'expired')) {
+      playAlertSound();
+      showBrowserNotification(`SSL: ${r.domain}`, curr === 'expired' ? 'critical' : curr);
+      if (alertEnabled) {
+        sendAlertToBackend(`ssl:${r.id}`, `SSL: ${r.domain}`, curr === 'expired' ? 'critical' : curr, {
+          daysRemaining: r.daysRemaining,
+        });
+      }
+    }
+    _previousSslStatusMap[r.id] = curr;
+  }
 }
 
 /**

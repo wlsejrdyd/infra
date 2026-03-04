@@ -1,18 +1,18 @@
 // assets/js/pages/admin.js
-import { fetchServersData, saveServersData } from '/assets/js/api.js';
+import { fetchServersData, saveServersData, fetchSslDomains, saveSslDomains } from '/assets/js/api.js';
 import { router } from '/assets/js/router.js';
 
 let serversData = { servers: [], defaultThresholds: {} };
+let sslData = { sslThresholds: { warning: 30, critical: 7 }, domains: [] };
 let editingServer = null;
+let editingSslDomain = null;
 
 // 디버깅용 전역 노출
 window._debugServersData = () => serversData;
 
 export async function renderAdmin() {
-  serversData = await fetchServersData();
-  
-  console.log('Admin page loaded, serversData:', serversData); // 디버그
-  
+  [serversData, sslData] = await Promise.all([fetchServersData(), fetchSslDomains()]);
+
   const main = document.getElementById('app');
   main.innerHTML = `
     <div class="main">
@@ -164,26 +164,100 @@ EOF</code>
       </div>
     </div>
 
+      <!-- SSL 도메인 관리 -->
+      <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+          <span class="card-title">🔒 SSL 인증서 도메인 관리</span>
+          <button class="btn btn-primary" id="addSslDomainBtn">➕ 도메인 추가</button>
+        </div>
+        <div style="display: flex; gap: 8px; margin-bottom: 1rem; align-items: center;">
+          <label style="font-size: 0.85rem; color: var(--text-muted);">만료 임계치 (일)</label>
+          <input type="number" class="form-input" id="sslWarningDays" value="${sslData.sslThresholds.warning}" style="width: 80px;" placeholder="경고">
+          <input type="number" class="form-input" id="sslCriticalDays" value="${sslData.sslThresholds.critical}" style="width: 80px;" placeholder="위험">
+          <button class="btn" id="saveSslThresholdsBtn">💾 저장</button>
+        </div>
+        <div style="overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 1px solid var(--border);">
+                <th style="text-align: left; padding: 10px; font-size: 0.8rem; color: var(--text-muted);">도메인</th>
+                <th style="text-align: left; padding: 10px; font-size: 0.8rem; color: var(--text-muted);">포트</th>
+                <th style="text-align: left; padding: 10px; font-size: 0.8rem; color: var(--text-muted);">설명</th>
+                <th style="text-align: center; padding: 10px; font-size: 0.8rem; color: var(--text-muted);">활성</th>
+                <th style="text-align: right; padding: 10px; font-size: 0.8rem; color: var(--text-muted);">액션</th>
+              </tr>
+            </thead>
+            <tbody id="sslDomainTableBody">
+              ${renderSslDomainTable()}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Push Agent 설치 가이드 -->
+      <div class="card" style="margin-top: 1.5rem; background: var(--bg-secondary);">
+        <div class="card-header">
+          <span class="card-title">📡 Push Agent 설치 (방화벽 차단 환경용)</span>
+        </div>
+        <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+          Node Exporter 포트(9100)에 접근할 수 없는 서버에서 사용합니다. 에이전트가 메트릭을 수집하여 모니터링 서버로 전송합니다.
+        </div>
+        <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem;">1. 에이전트 파일 복사</div>
+        <code id="pushAgentSetup" style="display:block;padding:10px;background:var(--bg-primary);border-radius:8px;font-size:0.8rem;margin-bottom:0.75rem;white-space:pre-wrap;">scp agent/push_agent.py agent/agent_config.json user@TARGET_SERVER:~/push_agent/</code>
+        <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem;">2. agent_config.json 수정</div>
+        <code style="display:block;padding:10px;background:var(--bg-primary);border-radius:8px;font-size:0.8rem;margin-bottom:0.75rem;white-space:pre-wrap;">{
+  "server_url": "https://infra.deok.kr/api/push/metrics",
+  "server_id": "서버ID (admin에서 등록한 ID와 일치)",
+  "api_key": "YOUR_PUSH_API_KEY",
+  "interval": 30
+}</code>
+        <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem;">3. systemd 서비스 등록</div>
+        <code id="pushSystemdCmd" style="display:block;padding:10px;background:var(--bg-primary);border-radius:8px;font-size:0.8rem;margin-bottom:0.5rem;white-space:pre-wrap;">cat > /etc/systemd/system/push-agent.service << 'EOF'
+[Unit]
+Description=Infra Push Monitoring Agent
+After=network.target
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /root/push_agent/push_agent.py
+Restart=always
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload && systemctl enable push-agent && systemctl start push-agent</code>
+        <button class="btn btn-primary" id="copyPushCmdBtn" style="margin-top:0.5rem;">📋 복사</button>
+      </div>
+
     <div id="serverModal" style="display: none;"></div>
+    <div id="sslModal" style="display: none;"></div>
   `;
 
-  // 이벤트 리스너 등록 (onclick 대신 addEventListener 사용)
+  // 이벤트 리스너 등록
   document.getElementById('addServerBtn').addEventListener('click', showAddServerModal);
   document.getElementById('copyInstallBtn').addEventListener('click', () => copyCmd('installCmd'));
   document.getElementById('copyK8sInstallBtn').addEventListener('click', () => copyCmd('k8sInstallCmd'));
-  document.getElementById('saveThresholdsBtn').addEventListener('click', async () => {
-    console.log('Save button clicked'); // 디버그
-    await saveThresholds();
-  });
-  
-  // 서버 수정/삭제 버튼에 이벤트 등록
+  document.getElementById('saveThresholdsBtn').addEventListener('click', () => saveThresholds());
+
+  // 서버 수정/삭제
   document.querySelectorAll('[data-action="edit"]').forEach(btn => {
     btn.addEventListener('click', () => showEditServerModal(btn.dataset.serverId));
   });
-  
   document.querySelectorAll('[data-action="delete"]').forEach(btn => {
     btn.addEventListener('click', () => deleteServer(btn.dataset.serverId));
   });
+
+  // SSL 도메인 관리
+  document.getElementById('addSslDomainBtn').addEventListener('click', showAddSslDomainModal);
+  document.getElementById('saveSslThresholdsBtn').addEventListener('click', () => saveSslThresholds());
+  document.querySelectorAll('[data-action="edit-ssl"]').forEach(btn => {
+    btn.addEventListener('click', () => showEditSslDomainModal(btn.dataset.sslId));
+  });
+  document.querySelectorAll('[data-action="delete-ssl"]').forEach(btn => {
+    btn.addEventListener('click', () => deleteSslDomain(btn.dataset.sslId));
+  });
+
+  // Push 가이드 복사
+  document.getElementById('copyPushCmdBtn')?.addEventListener('click', () => copyCmd('pushSystemdCmd'));
 }
 
 function copyCmd(elementId) {
@@ -197,11 +271,16 @@ function copyCmd(elementId) {
 }
 
 function renderServerTable() {
-  return serversData.servers.map(server => `
+  return serversData.servers.map(server => {
+    const mode = server.mode || 'pull';
+    const modeBadge = mode === 'push'
+      ? '<span class="badge" style="background:var(--accent);color:#fff;font-size:0.65rem;margin-left:4px;">PUSH</span>'
+      : '';
+    return `
     <tr style="border-bottom: 1px solid var(--border);">
       <td style="padding: 12px; font-size: 1.5rem;">${server.icon}</td>
       <td style="padding: 12px;">
-        <div style="font-weight: 600;">${server.name}</div>
+        <div style="font-weight: 600;">${server.name}${modeBadge}</div>
         <div style="font-size: 0.75rem; color: var(--text-muted);">${server.id}</div>
       </td>
       <td style="padding: 12px;">
@@ -217,8 +296,8 @@ function renderServerTable() {
           🗑️ 삭제
         </button>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 }
 
 function showAddServerModal() {
@@ -241,6 +320,7 @@ function showEditServerModal(serverId) {
 }
 
 function showServerModal(server) {
+  const mode = server.mode || 'pull';
   const modal = document.getElementById('serverModal');
   modal.style.display = 'block';
   modal.innerHTML = `
@@ -250,29 +330,37 @@ function showServerModal(server) {
           <h2 class="modal-title">${editingServer ? '서버 수정' : '서버 추가'}</h2>
           <button class="modal-close" id="modalCloseBtn">✕</button>
         </div>
-        
+
         <div class="form-group">
           <label class="form-label">서버 ID</label>
-          <input type="text" class="form-input" id="serverId" value="${server.id}" 
+          <input type="text" class="form-input" id="serverId" value="${server.id}"
                  placeholder="예: prod-web-01" ${editingServer ? 'disabled' : ''}>
         </div>
 
         <div class="form-group">
           <label class="form-label">서버 이름</label>
-          <input type="text" class="form-input" id="serverName" value="${server.name}" 
+          <input type="text" class="form-input" id="serverName" value="${server.name}"
                  placeholder="예: Production Web Server">
         </div>
 
         <div class="form-group">
           <label class="form-label">프로젝트</label>
-          <input type="text" class="form-input" id="serverProject" value="${server.project}" 
+          <input type="text" class="form-input" id="serverProject" value="${server.project}"
                  placeholder="예: SALM, Infrastructure">
         </div>
 
         <div class="form-group">
-          <label class="form-label">인스턴스 (IP:Port)</label>
-          <input type="text" class="form-input" id="serverInstance" value="${server.instance}" 
-                 placeholder="예: 10.0.1.10:9100">
+          <label class="form-label">모니터링 방식</label>
+          <select class="form-input" id="serverMode">
+            <option value="pull" ${mode === 'pull' ? 'selected' : ''}>Pull (Node Exporter)</option>
+            <option value="push" ${mode === 'push' ? 'selected' : ''}>Push (Agent)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" id="instanceLabel">${mode === 'push' ? '서버 식별자' : '인스턴스 (IP:Port)'}</label>
+          <input type="text" class="form-input" id="serverInstance" value="${server.instance}"
+                 placeholder="${mode === 'push' ? '예: external-web-01' : '예: 10.0.1.10:9100'}">
         </div>
 
         <div class="form-group">
@@ -304,16 +392,27 @@ function showServerModal(server) {
   document.getElementById('modalOverlay').addEventListener('click', (e) => {
     if (e.target.id === 'modalOverlay') closeModal();
   });
+
+  // mode 셀렉트 변경 시 라벨/플레이스홀더 동적 전환
+  document.getElementById('serverMode').addEventListener('change', (e) => {
+    const isPush = e.target.value === 'push';
+    const label = document.getElementById('instanceLabel');
+    const input = document.getElementById('serverInstance');
+    if (label) label.textContent = isPush ? '서버 식별자' : '인스턴스 (IP:Port)';
+    if (input) input.placeholder = isPush ? '예: external-web-01' : '예: 10.0.1.10:9100';
+  });
 }
 
 async function saveServer() {
+  const mode = document.getElementById('serverMode').value;
   const serverData = {
     id: document.getElementById('serverId').value.trim(),
     name: document.getElementById('serverName').value.trim(),
     project: document.getElementById('serverProject').value.trim(),
     instance: document.getElementById('serverInstance').value.trim(),
     icon: document.getElementById('serverIcon').value.trim(),
-    description: document.getElementById('serverDescription').value.trim()
+    description: document.getElementById('serverDescription').value.trim(),
+    mode: mode,
   };
 
   if (!serverData.id || !serverData.name || !serverData.project || !serverData.instance) {
@@ -384,6 +483,157 @@ async function saveThresholds() {
 function closeModal() {
   document.getElementById('serverModal').style.display = 'none';
 }
+
+
+// ──────────────────────────────────
+// SSL 도메인 관리
+// ──────────────────────────────────
+
+function renderSslDomainTable() {
+  return sslData.domains.map(d => `
+    <tr style="border-bottom: 1px solid var(--border);">
+      <td style="padding: 10px; font-family: monospace; font-size: 0.85rem;">${d.domain}</td>
+      <td style="padding: 10px; font-size: 0.85rem;">${d.port || 443}</td>
+      <td style="padding: 10px; font-size: 0.85rem; color: var(--text-muted);">${d.description || ''}</td>
+      <td style="padding: 10px; text-align: center;">${d.enabled !== false ? '✅' : '⏸️'}</td>
+      <td style="padding: 10px; text-align: right;">
+        <button class="btn" data-action="edit-ssl" data-ssl-id="${d.id}" style="margin-right: 4px;">✏️</button>
+        <button class="btn btn-danger" data-action="delete-ssl" data-ssl-id="${d.id}">🗑️</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function showAddSslDomainModal() {
+  editingSslDomain = null;
+  showSslDomainModal({ id: '', domain: '', port: 443, description: '', enabled: true });
+}
+
+function showEditSslDomainModal(sslId) {
+  editingSslDomain = sslData.domains.find(d => d.id === sslId);
+  if (editingSslDomain) showSslDomainModal(editingSslDomain);
+}
+
+function showSslDomainModal(domain) {
+  const modal = document.getElementById('sslModal');
+  modal.style.display = 'block';
+  modal.innerHTML = `
+    <div class="modal-overlay" id="sslModalOverlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 class="modal-title">${editingSslDomain ? 'SSL 도메인 수정' : 'SSL 도메인 추가'}</h2>
+          <button class="modal-close" id="sslModalCloseBtn">✕</button>
+        </div>
+        <div class="form-group">
+          <label class="form-label">ID</label>
+          <input type="text" class="form-input" id="sslDomainId" value="${domain.id}"
+                 placeholder="예: main-site" ${editingSslDomain ? 'disabled' : ''}>
+        </div>
+        <div class="form-group">
+          <label class="form-label">도메인</label>
+          <input type="text" class="form-input" id="sslDomainName" value="${domain.domain}"
+                 placeholder="예: infra.deok.kr">
+        </div>
+        <div class="form-group">
+          <label class="form-label">포트</label>
+          <input type="number" class="form-input" id="sslDomainPort" value="${domain.port || 443}" placeholder="443">
+        </div>
+        <div class="form-group">
+          <label class="form-label">설명</label>
+          <input type="text" class="form-input" id="sslDomainDesc" value="${domain.description || ''}" placeholder="설명">
+        </div>
+        <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="sslDomainEnabled" ${domain.enabled !== false ? 'checked' : ''}>
+          <label for="sslDomainEnabled" class="form-label" style="margin:0;">활성화</label>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 1.5rem;">
+          <button class="btn" id="sslModalCancelBtn" style="flex: 1;">취소</button>
+          <button class="btn btn-primary" id="sslModalSaveBtn" style="flex: 1;">
+            ${editingSslDomain ? '저장' : '추가'}
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('sslModalCloseBtn').addEventListener('click', closeSslModal);
+  document.getElementById('sslModalCancelBtn').addEventListener('click', closeSslModal);
+  document.getElementById('sslModalSaveBtn').addEventListener('click', saveSslDomain);
+  document.getElementById('sslModalOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'sslModalOverlay') closeSslModal();
+  });
+}
+
+function closeSslModal() {
+  document.getElementById('sslModal').style.display = 'none';
+}
+
+async function saveSslDomain() {
+  const domainData = {
+    id: document.getElementById('sslDomainId').value.trim(),
+    domain: document.getElementById('sslDomainName').value.trim(),
+    port: parseInt(document.getElementById('sslDomainPort').value) || 443,
+    description: document.getElementById('sslDomainDesc').value.trim(),
+    enabled: document.getElementById('sslDomainEnabled').checked,
+  };
+
+  if (!domainData.id || !domainData.domain) {
+    alert('ID와 도메인은 필수입니다.');
+    return;
+  }
+
+  if (editingSslDomain) {
+    const idx = sslData.domains.findIndex(d => d.id === editingSslDomain.id);
+    sslData.domains[idx] = { ...editingSslDomain, ...domainData };
+  } else {
+    if (sslData.domains.find(d => d.id === domainData.id)) {
+      alert('이미 존재하는 도메인 ID입니다.');
+      return;
+    }
+    sslData.domains.push(domainData);
+  }
+
+  const success = await saveSslDomains(sslData);
+  if (success) {
+    closeSslModal();
+    refreshSslTable();
+    alert('SSL 도메인이 저장되었습니다.');
+  }
+}
+
+async function deleteSslDomain(sslId) {
+  if (!confirm('이 SSL 도메인을 삭제하시겠습니까?')) return;
+  sslData.domains = sslData.domains.filter(d => d.id !== sslId);
+  const success = await saveSslDomains(sslData);
+  if (success) {
+    refreshSslTable();
+    alert('SSL 도메인이 삭제되었습니다.');
+  }
+}
+
+async function saveSslThresholds() {
+  sslData.sslThresholds = {
+    warning: parseInt(document.getElementById('sslWarningDays').value) || 30,
+    critical: parseInt(document.getElementById('sslCriticalDays').value) || 7,
+  };
+  const success = await saveSslDomains(sslData);
+  if (success) alert('SSL 임계치가 저장되었습니다.');
+}
+
+function refreshSslTable() {
+  const tbody = document.getElementById('sslDomainTableBody');
+  if (tbody) {
+    tbody.innerHTML = renderSslDomainTable();
+    // 이벤트 재등록
+    tbody.querySelectorAll('[data-action="edit-ssl"]').forEach(btn => {
+      btn.addEventListener('click', () => showEditSslDomainModal(btn.dataset.sslId));
+    });
+    tbody.querySelectorAll('[data-action="delete-ssl"]').forEach(btn => {
+      btn.addEventListener('click', () => deleteSslDomain(btn.dataset.sslId));
+    });
+  }
+}
+
 
 export function cleanupAdmin() {
   // 정리 작업

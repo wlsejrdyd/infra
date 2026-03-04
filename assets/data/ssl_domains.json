@@ -1,0 +1,7 @@
+{
+  "sslThresholds": {
+    "warning": 30,
+    "critical": 7
+  },
+  "domains": []
+}
