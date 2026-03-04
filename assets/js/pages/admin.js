@@ -162,7 +162,6 @@ EOF</code>
           </table>
         </div>
       </div>
-    </div>
 
       <!-- SSL 도메인 관리 -->
       <div class="card" style="margin-top: 1.5rem;">
@@ -227,6 +226,7 @@ EOF
 systemctl daemon-reload && systemctl enable push-agent && systemctl start push-agent</code>
         <button class="btn btn-primary" id="copyPushCmdBtn" style="margin-top:0.5rem;">📋 복사</button>
       </div>
+    </div>
 
     <div id="serverModal" style="display: none;"></div>
     <div id="sslModal" style="display: none;"></div>
