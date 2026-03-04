@@ -224,28 +224,31 @@ EOF</code>
           Node Exporter 포트(9100)에 접근할 수 없는 서버에서 사용합니다. 에이전트가 메트릭을 수집하여 모니터링 서버로 전송합니다.
         </div>
         <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem;">1. 에이전트 파일 복사</div>
-        <code id="pushAgentSetup" style="display:block;padding:10px;background:var(--bg-primary);border-radius:8px;font-size:0.8rem;margin-bottom:0.75rem;white-space:pre-wrap;">scp agent/push_agent.py agent/agent_config.json user@TARGET_SERVER:~/push_agent/</code>
+        <code id="pushAgentSetup" style="display:block;padding:10px;background:var(--bg-primary);border-radius:8px;font-size:0.8rem;margin-bottom:0.75rem;white-space:pre-wrap;">mkdir -p ~/sim_mon_agent
+scp agent/push_agent.py agent/agent_config.json user@TARGET_SERVER:~/sim_mon_agent/</code>
         <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem;">2. agent_config.json 수정</div>
         <code style="display:block;padding:10px;background:var(--bg-primary);border-radius:8px;font-size:0.8rem;margin-bottom:0.75rem;white-space:pre-wrap;">{
   "server_url": "https://infra.deok.kr/api/push/metrics",
   "server_id": "서버ID (admin에서 등록한 ID와 일치)",
-  "api_key": "YOUR_PUSH_API_KEY",
+  "api_key": "Admin에서 생성된 Push API Key",
   "interval": 30
 }</code>
         <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem;">3. systemd 서비스 등록</div>
-        <code id="pushSystemdCmd" style="display:block;padding:10px;background:var(--bg-primary);border-radius:8px;font-size:0.8rem;margin-bottom:0.5rem;white-space:pre-wrap;">cat > /etc/systemd/system/push-agent.service << 'EOF'
+        <code id="pushSystemdCmd" style="display:block;padding:10px;background:var(--bg-primary);border-radius:8px;font-size:0.8rem;margin-bottom:0.5rem;white-space:pre-wrap;">cat > /etc/systemd/system/sim-mon-agent.service << 'EOF'
 [Unit]
-Description=Infra Push Monitoring Agent
+Description=SIM Monitoring Agent
 After=network.target
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /root/push_agent/push_agent.py
+User=root
+WorkingDirectory=/root/sim_mon_agent
+ExecStart=/usr/bin/python3 /root/sim_mon_agent/push_agent.py
 Restart=always
 RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl daemon-reload && systemctl enable push-agent && systemctl start push-agent</code>
+systemctl daemon-reload && systemctl enable sim-mon-agent && systemctl start sim-mon-agent</code>
         <button class="btn btn-primary" id="copyPushCmdBtn" style="margin-top:0.5rem;">📋 복사</button>
       </div>
     </div>
@@ -260,22 +263,23 @@ systemctl daemon-reload && systemctl enable push-agent && systemctl start push-a
   document.getElementById('copyK8sInstallBtn').addEventListener('click', () => copyCmd('k8sInstallCmd'));
   document.getElementById('saveThresholdsBtn').addEventListener('click', () => saveThresholds());
 
-  // 서버 수정/삭제
-  document.querySelectorAll('[data-action="edit"]').forEach(btn => {
-    btn.addEventListener('click', () => showEditServerModal(btn.dataset.serverId));
-  });
-  document.querySelectorAll('[data-action="delete"]').forEach(btn => {
-    btn.addEventListener('click', () => deleteServer(btn.dataset.serverId));
+  // 서버 수정/삭제 — 이벤트 위임 (동적 DOM 재생성에도 동작)
+  document.getElementById('serverTableBody').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    if (btn.dataset.action === 'edit') showEditServerModal(btn.dataset.serverId);
+    if (btn.dataset.action === 'delete') deleteServer(btn.dataset.serverId);
   });
 
   // SSL 도메인 관리
   document.getElementById('addSslDomainBtn').addEventListener('click', showAddSslDomainModal);
   document.getElementById('saveSslThresholdsBtn').addEventListener('click', () => saveSslThresholds());
-  document.querySelectorAll('[data-action="edit-ssl"]').forEach(btn => {
-    btn.addEventListener('click', () => showEditSslDomainModal(btn.dataset.sslId));
-  });
-  document.querySelectorAll('[data-action="delete-ssl"]').forEach(btn => {
-    btn.addEventListener('click', () => deleteSslDomain(btn.dataset.sslId));
+  // SSL 수정/삭제 — 이벤트 위임
+  document.getElementById('sslDomainTableBody').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    if (btn.dataset.action === 'edit-ssl') showEditSslDomainModal(btn.dataset.sslId);
+    if (btn.dataset.action === 'delete-ssl') deleteSslDomain(btn.dataset.sslId);
   });
 
   // Push 가이드 복사
@@ -368,7 +372,10 @@ function showServerModal(server) {
         <div class="form-group">
           <label class="form-label">프로젝트</label>
           <input type="text" class="form-input" id="serverProject" value="${server.project}"
-                 placeholder="예: SALM, Infrastructure">
+                 list="projectList" placeholder="예: SALM, Infrastructure" autocomplete="off">
+          <datalist id="projectList">
+            ${[...new Set(serversData.servers.map(s => s.project).filter(Boolean))].map(p => `<option value="${p}">`).join('')}
+          </datalist>
         </div>
 
         <div class="form-group">
