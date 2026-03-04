@@ -365,8 +365,9 @@ async function updateServerGrid() {
     }
 
     if (k8sData && k8sData.nodeAllocatable && k8sData.pods) {
-      const totalCpuReq = k8sData.pods.reduce((sum, p) => sum + (p.cpuReq || 0), 0);
-      const totalMemReq = k8sData.pods.reduce((sum, p) => sum + (p.memReq || 0), 0);
+      const activePods = k8sData.pods.filter(p => p.phase === 'Running' || p.phase === 'Pending');
+      const totalCpuReq = activePods.reduce((sum, p) => sum + (p.cpuReq || 0), 0);
+      const totalMemReq = activePods.reduce((sum, p) => sum + (p.memReq || 0), 0);
       const allocCpu = k8sData.nodeAllocatable.cpu || 0;
       const allocMem = k8sData.nodeAllocatable.memory || 0;
       if (allocCpu > 0) metrics.cpuRequestPct = (totalCpuReq / allocCpu) * 100;
