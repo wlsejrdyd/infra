@@ -1,7 +1,36 @@
 {
+  "domains": [
+    {
+      "description": "",
+      "domain": "deok.kr",
+      "enabled": true,
+      "id": "deok",
+      "port": 443
+    },
+    {
+      "description": "인프라모니터링",
+      "domain": "infra.deok.kr",
+      "enabled": true,
+      "id": "infra",
+      "port": 443
+    },
+    {
+      "id": "simplatform",
+      "domain": "simplatform.com",
+      "port": 443,
+      "description": "simplatform 메인페이지",
+      "enabled": true
+    },
+    {
+      "id": "simplatfrom groupware",
+      "domain": "gw.simplatform.com",
+      "port": 443,
+      "description": "심플랫폼 그룹웨어",
+      "enabled": true
+    }
+  ],
   "sslThresholds": {
-    "warning": 30,
-    "critical": 7
-  },
-  "domains": []
+    "critical": 7,
+    "warning": 30
+  }
 }

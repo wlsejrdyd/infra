@@ -1,24 +1,10 @@
 {
   "defaultThresholds": {
     "cpu": {
-      "warning": 70,
-      "critical": 80
-    },
-    "memory": {
-      "warning": 70,
-      "critical": 80
+      "critical": 80,
+      "warning": 71
     },
     "disk": {
-      "warning": 80,
-      "critical": 90
-    },
-    "cpuRequest": {
-      "warning": 80,
-      "critical": 90
-    },
-    "memoryRequest": {
-      "warning": 80,
-      "critical": 90
     }
   },
   "servers": [
@@ -31,7 +17,7 @@
       "project": "메인서버"
     },
     {
-      "description": "Test Server",
+      "description": "진덕용 개인 Gitlab 서버",
       "icon": "🧪",
       "id": "ubuntu-dev",
       "instance": "192.168.100.2:9100",
@@ -101,6 +87,15 @@
       "instance": "192.168.100.7:9100",
       "name": "jdy-download",
       "project": "TEST"
+    },
+    {
+      "id": "DataLakePoC-Standalone-01",
+      "name": "DataLakePoC-Standalone-01",
+      "project": "DATALAKE",
+      "instance": "DataLakePoC-Standalone-01",
+      "icon": "🖥️",
+      "description": "",
+      "mode": "push"
     }
   ]
 }
