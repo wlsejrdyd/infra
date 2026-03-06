@@ -169,6 +169,8 @@ Push 에이전트 수집 항목: CPU, Memory, Disk, Uptime, Load Average, Networ
 | CPU | 70% | 80% |
 | Memory | 70% | 80% |
 | Disk | 80% | 90% |
+| K8s CPU Request | 80% | 90% |
+| K8s MEM Request | 80% | 90% |
 
 ---
 
@@ -207,20 +209,22 @@ Admin 페이지에서 모니터링 방식을 **Push**로 선택하여 서버를 
 
 ### 2. API 키 설정
 
-모니터링 서버의 `api/.env`에 Push API 키를 추가합니다:
+**서버별 API Key** (권장): Admin에서 Push 모드 서버 등록 시 48자 hex 키가 자동 생성됩니다. 이 키를 에이전트 설정에 사용합니다.
+
+**마스터 API Key** (폴백): `api/.env`에 `PUSH_API_KEY`를 설정하면 모든 Push 서버에 대한 폴백 키로 동작합니다.
 
 ```env
-PUSH_API_KEY=원하는_키_값
+PUSH_API_KEY=마스터_폴백_키 (선택)
 ```
 
-> Flask 재시작 필요.
+> 서버별 키가 우선 적용되며, 일치하지 않을 때 마스터 키로 폴백합니다.
 
 ### 3. 에이전트 배포
 
 대상 서버에 에이전트 파일을 복사하고 설정합니다:
 
 ```bash
-scp agent/push_agent.py agent/agent_config.json user@TARGET_SERVER:~/push_agent/
+scp agent/push_agent.py agent/agent_config.json user@TARGET_SERVER:~/sim_mon_agent/
 ```
 
 `agent_config.json` 수정:
@@ -229,7 +233,7 @@ scp agent/push_agent.py agent/agent_config.json user@TARGET_SERVER:~/push_agent/
 {
   "server_url": "https://infra.deok.kr/api/push/metrics",
   "server_id": "admin에서 등록한 서버 ID",
-  "api_key": "api/.env에 설정한 PUSH_API_KEY",
+  "api_key": "admin에서 발급된 서버별 API Key",
   "interval": 30
 }
 ```
@@ -237,26 +241,26 @@ scp agent/push_agent.py agent/agent_config.json user@TARGET_SERVER:~/push_agent/
 ### 4. systemd 서비스 등록
 
 ```bash
-cat > /etc/systemd/system/push-agent.service << 'EOF'
+cat > /etc/systemd/system/sim-mon-agent.service << 'EOF'
 [Unit]
 Description=Infra Push Monitoring Agent
 After=network.target
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /home/user/push_agent/push_agent.py
+ExecStart=/usr/bin/python3 /home/user/sim_mon_agent/push_agent.py
 Restart=always
 RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl daemon-reload && systemctl enable push-agent && systemctl start push-agent
+systemctl daemon-reload && systemctl enable sim-mon-agent && systemctl start sim-mon-agent
 ```
 
 ### 5. 확인
 
 ```bash
 # 에이전트 로그
-journalctl -u push-agent -f
+journalctl -u sim-mon-agent -f
 
 # API 직접 테스트
 curl https://infra.deok.kr/api/push/metrics/서버ID
