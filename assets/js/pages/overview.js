@@ -486,12 +486,11 @@ function renderNodeCard(server) {
 
   // ── 메트릭 행 (명세서 섹션 4, 5) ──
   const barH = Math.max(4, Math.round(6 * s));
-  const sparkH = Math.max(18, Math.round(24 * s));
   const lblFs = `${clamp(0.55, 0.68 * s, 0.85).toFixed(2)}rem`;
   const valFs = `${clamp(0.55, 0.72 * s, 0.95).toFixed(2)}rem`;
   const lblW = `${Math.max(24, Math.round(34 * s))}px`;
   const valW = `${Math.max(28, Math.round(38 * s))}px`;
-  const rowGap = `${Math.max(4, Math.round(8 * s))}px`;
+  const rowGap = `${Math.max(2, Math.round(5 * s))}px`;
 
   const metricRow = (label, val, type, histKey) => {
     const color = gc(val, type);
@@ -500,14 +499,19 @@ function renderNodeCard(server) {
     const hist = sparklineHistory[histKey];
     const hasHist = hist && hist.length >= 2;
 
+    // sparkline: 바 영역 우측 40%에만 오버레이, 높이는 바와 동일 레벨
+    const sparkCanvas = hasHist
+      ? `<canvas data-sparkline="${histKey}" style="position:absolute;top:-${barH + 8}px;right:0;width:40%;height:${barH + 12}px;pointer-events:none;"></canvas>`
+      : '';
+
     return `
       <div style="display:flex;align-items:center;gap:6px;margin-top:${rowGap};">
         <span style="font-size:${lblFs};font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#A9ABB3;min-width:${lblW};">${label}</span>
-        <div style="flex:1;position:relative;height:${hasHist ? sparkH + 'px' : barH + 'px'};">
-          <div style="position:absolute;bottom:0;left:0;right:0;height:${barH}px;background:#1C2028;border-radius:3px;overflow:hidden;">
+        <div style="flex:1;position:relative;height:${barH}px;">
+          <div style="position:absolute;top:0;left:0;right:0;height:${barH}px;background:#1C2028;border-radius:3px;overflow:hidden;">
             <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:all 0.5s ease;"></div>
           </div>
-          ${hasHist ? `<canvas data-sparkline="${histKey}" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>` : ''}
+          ${sparkCanvas}
         </div>
         <span style="font-size:${valFs};font-weight:700;font-family:'Space Grotesk',var(--font-brand),monospace;min-width:${valW};text-align:right;color:${off ? '#4B5563' : color};">${display}</span>
       </div>`;
