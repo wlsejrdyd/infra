@@ -201,7 +201,7 @@
 .modal {
   background: var(--bg-card);
   border: 1px solid var(--border-light);
-  border-radius: 16px;
+  border-radius: 6px;
   padding: 1.5rem;
   max-width: 600px;
   width: 90%;

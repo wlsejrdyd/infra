@@ -116,7 +116,7 @@ function calcCardStyle(rows, availH) {
     valW: `${Math.max(26, Math.round(34 * s))}px`,
     nameMb: `${Math.max(3, Math.round(6 * s))}px`,
     metricGap: `${Math.max(2, Math.round(4 * s))}px`,
-    radius: `${Math.max(8, Math.round(12 * s))}px`,
+    radius: `${Math.max(4, Math.round(6 * s))}px`,
     projSize: `${clamp(0.45, 0.55 * s, 0.7).toFixed(2)}rem`,
   };
 }
@@ -509,8 +509,8 @@ function renderNodeCard(server) {
       <div style="display:flex;align-items:center;gap:6px;margin-top:${rowGap};">
         <span style="font-size:${lblFs};font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#A9ABB3;min-width:${lblW};">${label}</span>
         <div style="flex:1;position:relative;height:${barH}px;">
-          <div style="position:absolute;top:0;left:0;right:0;height:${barH}px;background:#1C2028;border-radius:3px;overflow:hidden;">
-            <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:all 0.5s ease;"></div>
+          <div style="position:absolute;top:0;left:0;right:0;height:${barH}px;background:#1C2028;border-radius:2px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:${color};border-radius:2px;transition:all 0.5s ease;"></div>
           </div>
           ${sparkCanvas}
         </div>
@@ -520,7 +520,7 @@ function renderNodeCard(server) {
 
   // ── 카드 사이즈 ──
   const pad = `${Math.max(8, Math.round(16 * s))}px`;
-  const radius = `${Math.max(8, Math.round(10 * s))}px`;
+  const radius = `${Math.max(4, Math.round(6 * s))}px`;
   const nameFs = `${clamp(0.7, 1.05 * s, 1.3).toFixed(2)}rem`;
   const projFs = `${clamp(0.5, 0.62 * s, 0.75).toFixed(2)}rem`;
   const nameMb = `${Math.max(4, Math.round(8 * s))}px`;
