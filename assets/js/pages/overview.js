@@ -95,12 +95,12 @@ function showToast(emoji, serverName, label) {
 function clamp(min, val, max) { return Math.min(max, Math.max(min, val)); }
 
 function calcCardStyle(rows, availH) {
-  const MAX_H = 180;
-  const MIN_H = 70;
+  const MAX_H = 210;
+  const MIN_H = 90;
   const rawH = Math.floor((availH - (rows - 1) * GAP) / rows);
   const h = clamp(MIN_H, rawH, MAX_H);
-  const w = Math.floor(h * 2.1);
-  const s = h / 120;
+  const w = Math.floor(h * 1.7);
+  const s = h / 150;
   const usedH = rows * h;
   const extraGap = rows > 1 ? Math.min(Math.floor((availH - usedH) / (rows - 1)), 30) : 0;
   const dynGap = GAP + extraGap;
@@ -499,28 +499,30 @@ function renderNodeCard(server) {
   const ledSize = `${Math.max(7, Math.round(9 * s))}px`;
 
   /**
-   * 시안 구조: 한 줄에 [라벨] [===바+sparkline===] [값%]
+   * 2줄 구조:
+   * 줄1: [라벨]  ~~~sparkline~~~  [값%]
+   * 줄2: [=========progress bar=========]
    */
+  const sparkH = Math.max(16, Math.round(20 * s));
   const metricRow = (label, val, type, histKey) => {
     const color = gc(val, type);
     const pct = off ? 0 : (val || 0);
     const display = off || val == null ? '-- %' : `${val.toFixed(0)}%`;
     const hist = sparklineHistory[histKey];
     const hasHist = hist && hist.length >= 2;
-    const sparkCanvas = hasHist
-      ? `<canvas data-sparkline="${histKey}" style="position:absolute;bottom:${barH}px;right:0;width:35%;height:${Math.max(16, Math.round(22 * s))}px;pointer-events:none;"></canvas>`
-      : '';
 
     return `
-      <div style="display:flex;align-items:center;gap:${Math.max(4, Math.round(6 * s))}px;margin-top:${rowGap};">
-        <span style="font-size:${lblFs};font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#A9ABB3;min-width:${lblW};flex-shrink:0;">${label}</span>
-        <div style="flex:1;position:relative;height:${barH}px;">
-          <div style="height:100%;background:#1C2028;border-radius:2px;overflow:hidden;">
-            <div style="height:100%;width:${pct}%;background:${color};border-radius:2px;transition:all 0.5s ease;"></div>
+      <div style="margin-top:${rowGap};">
+        <div style="display:flex;align-items:flex-end;gap:4px;margin-bottom:${Math.max(2, Math.round(3 * s))}px;">
+          <span style="font-size:${lblFs};font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#A9ABB3;flex-shrink:0;">${label}</span>
+          <div style="flex:1;height:${sparkH}px;position:relative;">
+            ${hasHist ? `<canvas data-sparkline="${histKey}" style="position:absolute;top:0;left:0;width:100%;height:100%;"></canvas>` : ''}
           </div>
-          ${sparkCanvas}
+          <span style="font-size:${valFs};font-weight:700;font-family:'Space Grotesk',monospace;flex-shrink:0;color:${off ? '#4B5563' : color};">${display}</span>
         </div>
-        <span style="font-size:${valFs};font-weight:700;font-family:'Space Grotesk',monospace;min-width:${valW};text-align:right;flex-shrink:0;color:${off ? '#4B5563' : color};">${display}</span>
+        <div style="height:${barH}px;background:#1C2028;border-radius:2px;overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:${color};border-radius:2px;transition:all 0.5s ease;"></div>
+        </div>
       </div>`;
   };
 
