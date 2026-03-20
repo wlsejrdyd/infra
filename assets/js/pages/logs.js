@@ -26,9 +26,9 @@ export async function renderLogs() {
             </select>
             <select class="filter-select" id="logContainer">
               <option value="">All Containers</option>
-              <option value="pxc">pxc</option>
-              <option value="proxysql">proxysql</option>
-              <option value="logs">logs</option>
+            </select>
+            <select class="filter-select" id="logPod" style="max-width:200px;">
+              <option value="">All Pods</option>
             </select>
             <button class="btn btn-primary" id="exportLogsBtn">Export Logs</button>
           </div>
@@ -142,10 +142,13 @@ export async function renderLogs() {
 
   document.getElementById('logNamespace').addEventListener('change', (e) => {
     currentQuery = e.target.value;
+    loadContainers();
+    loadPods();
     fetchLogs();
   });
 
-  document.getElementById('logContainer').addEventListener('change', () => fetchLogs());
+  document.getElementById('logContainer').addEventListener('change', () => { loadPods(); fetchLogs(); });
+  document.getElementById('logPod').addEventListener('change', () => fetchLogs());
   document.getElementById('logTimeRange').addEventListener('change', () => fetchLogs());
   document.getElementById('logRegex').addEventListener('input', debounce(() => {
     regexFilter = document.getElementById('logRegex').value;
@@ -163,6 +166,7 @@ export async function renderLogs() {
   }
 
   await loadNamespaces();
+  await Promise.all([loadContainers(), loadPods()]);
   await fetchLogs();
   refreshInterval = setInterval(fetchLogs, 10000);
 }
@@ -171,13 +175,46 @@ async function loadNamespaces() {
   try {
     const resp = await fetch('/api/loki/label/namespace/values');
     const data = await resp.json();
-    if (data.data) {
+    if (data.data && data.data.length > 0) {
       const sel = document.getElementById('logNamespace');
       sel.innerHTML = data.data.map(ns =>
         `<option value='{namespace="${ns}"}' ${ns === 'database' ? 'selected' : ''}>${ns}</option>`
       ).join('');
     }
   } catch (e) { /* Loki 미연결 시 기본값 유지 */ }
+}
+
+async function loadContainers() {
+  const sel = document.getElementById('logContainer');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">All Containers</option>';
+  try {
+    const resp = await fetch('/api/loki/label/container/values');
+    const data = await resp.json();
+    if (data.data && data.data.length > 0) {
+      sel.innerHTML += data.data
+        .filter(c => c && c !== '')
+        .sort()
+        .map(c => `<option value="${c}">${c}</option>`)
+        .join('');
+    }
+  } catch (e) { /* */ }
+}
+
+async function loadPods() {
+  const sel = document.getElementById('logPod');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">All Pods</option>';
+  try {
+    const resp = await fetch('/api/loki/label/pod/values');
+    const data = await resp.json();
+    if (data.data && data.data.length > 0) {
+      // 현재 선택된 namespace로 필터 (pod 이름에 포함된 경우)
+      const container = document.getElementById('logContainer')?.value;
+      let pods = data.data.filter(p => p && p !== '').sort();
+      sel.innerHTML += pods.map(p => `<option value="${p}">${p}</option>`).join('');
+    }
+  } catch (e) { /* */ }
 }
 
 async function fetchLogs() {
@@ -190,9 +227,13 @@ async function fetchLogs() {
   const end = now * 1000000;
 
   const container = document.getElementById('logContainer')?.value;
+  const pod = document.getElementById('logPod')?.value;
   let query = currentQuery;
   if (container) {
     query = query.replace('}', `,container="${container}"}`);
+  }
+  if (pod) {
+    query = query.replace('}', `,pod="${pod}"}`);
   }
   if (regexFilter) {
     query += ` |~ \`${regexFilter}\``;
