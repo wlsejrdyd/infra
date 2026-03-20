@@ -253,9 +253,13 @@ sudo systemctl restart sim-mon-agent
 
 # 에이전트 중지
 sudo systemctl stop sim-mon-agent</code>
-      <button class="btn" id="copyPushStep3" style="font-size:0.7rem;">Step 3 복사</button>
+      <button class="btn" id="copyPushStep3" style="font-size:0.7rem;margin-bottom:0.75rem;">Step 3 복사</button>
 
-      <div style="margin-top:0.75rem;padding:0.5rem;background:#0B0E14;border-radius:3px;font-size:0.7rem;color:#6B7A90;">
+      <div style="font-size:0.72rem;font-weight:600;color:#10B981;margin-bottom:0.3rem;">에이전트 업데이트 (패치)</div>
+      <code id="pushPatch" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">cd ~/sim_mon_agent && curl -skO https://infra.deok.kr/agent/push_agent.py && sudo systemctl restart sim-mon-agent && journalctl -u sim-mon-agent --no-pager -n 5</code>
+      <button class="btn" id="copyPushPatch" style="font-size:0.7rem;margin-bottom:0.75rem;">패치 명령 복사</button>
+
+      <div style="margin-top:0.5rem;padding:0.5rem;background:#0B0E14;border-radius:3px;font-size:0.7rem;color:#6B7A90;">
         <strong style="color:#F59E0B;">참고:</strong> server_id와 api_key는 Settings → 서버 관리 → Push 모드로 서버 등록 시 자동 생성됩니다.
       </div>
     </div>
@@ -307,6 +311,7 @@ LOKI_ORG_ID=1</code>
   document.getElementById('copyPushStep1')?.addEventListener('click', () => copyCmd('pushStep1'));
   document.getElementById('copyPushStep2')?.addEventListener('click', () => copyCmd('pushStep2'));
   document.getElementById('copyPushStep3')?.addEventListener('click', () => copyCmd('pushStep3'));
+  document.getElementById('copyPushPatch')?.addEventListener('click', () => copyCmd('pushPatch'));
   document.getElementById('copyLokiNpBtn')?.addEventListener('click', () => copyCmd('lokiNpCmd'));
 }
 
