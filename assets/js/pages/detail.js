@@ -354,7 +354,7 @@ function renderK8sPods(k8sData, container, titleEl, iconEl) {
     <span><span style="color:#10B981;font-weight:700;">${k8sData.summary.running}</span> <span style="color:#6B7A90;">Running</span></span>
     <span><span style="color:#F59E0B;font-weight:700;">${k8sData.summary.pending}</span> <span style="color:#6B7A90;">Pending</span></span>
     <span><span style="color:#EF4444;font-weight:700;">${k8sData.summary.failed}</span> <span style="color:#6B7A90;">Failed</span></span>
-    ${alloc ? `<span style="margin-left:auto;color:#6B7A90;">CPU ${fmtCpu(cpuReq)}/${fmtCpu(alloc.cpu)} · MEM ${formatBytes(memReq)}/${formatBytes(alloc.memory)}</span>` : ''}
+    ${alloc ? `<span style="margin-left:auto;color:#6B7A90;">CPU ${fmtCpu(cpuReq)}/${fmtCpu(alloc.cpu)} <span style="color:${alloc.cpu > 0 && cpuReq/alloc.cpu >= 0.9 ? '#EF4444' : alloc.cpu > 0 && cpuReq/alloc.cpu >= 0.8 ? '#F59E0B' : '#10B981'};font-weight:700;">(${alloc.cpu > 0 ? (cpuReq/alloc.cpu*100).toFixed(1) : 0}%)</span> · MEM ${formatBytes(memReq)}/${formatBytes(alloc.memory)} <span style="color:${alloc.memory > 0 && memReq/alloc.memory >= 0.9 ? '#EF4444' : alloc.memory > 0 && memReq/alloc.memory >= 0.8 ? '#F59E0B' : '#10B981'};font-weight:700;">(${alloc.memory > 0 ? (memReq/alloc.memory*100).toFixed(1) : 0}%)</span></span>` : ''}
   </div>`;
 
   k8sData.pods.forEach((pod, i) => {
