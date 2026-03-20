@@ -95,11 +95,12 @@ function showToast(emoji, serverName, label) {
 function clamp(min, val, max) { return Math.min(max, Math.max(min, val)); }
 
 function calcCardStyle(rows, availH) {
-  const MAX_H = 155;
+  const MAX_H = 210;
+  const MIN_H = 80;
   const rawH = Math.floor((availH - (rows - 1) * GAP) / rows);
-  const h = clamp(60, rawH, MAX_H);
-  const w = Math.floor(h * 2.3);
-  const s = h / 100;
+  const h = clamp(MIN_H, rawH, MAX_H);
+  const w = Math.floor(h * 1.45);
+  const s = h / 140; // 기준 높이 140px
   const usedH = rows * h;
   const extraGap = rows > 1 ? Math.min(Math.floor((availH - usedH) / (rows - 1)), 30) : 0;
   const dynGap = GAP + extraGap;
