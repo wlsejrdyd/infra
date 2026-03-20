@@ -1,6 +1,7 @@
 // assets/js/config.js
 export const CONFIG = {
   prometheusUrl: '/prometheus',
+  lokiUrl: '/loki',
   reportsUrl: '/reports',
   backupReportUrl: '/reports/backup_status.json',
   serversDataUrl: '/assets/data/servers.json',

@@ -51,6 +51,9 @@ SLACK_CHANNEL = os.environ.get('SLACK_CHANNEL', '')
 # Push 에이전트 인증키
 PUSH_API_KEY = os.environ.get('PUSH_API_KEY', '')
 
+# Loki 설정
+LOKI_URL = os.environ.get('LOKI_URL', 'http://localhost:3100')
+
 @app.route('/api/servers', methods=['GET'])
 def get_servers():
     """서버 목록 조회"""
@@ -516,6 +519,57 @@ def get_push_metrics(server_id):
             pass
 
     return jsonify(entry), 200
+
+
+# ──────────────────────────────────
+# Loki 로그 API (프록시)
+# ──────────────────────────────────
+
+@app.route('/api/loki/query_range', methods=['GET'])
+def loki_query_range():
+    """Loki query_range 프록시 — 프론트에서 직접 Loki 접근 불필요"""
+    try:
+        params = {
+            'query': request.args.get('query', ''),
+            'start': request.args.get('start', ''),
+            'end': request.args.get('end', ''),
+            'limit': request.args.get('limit', '500'),
+            'direction': request.args.get('direction', 'backward'),
+        }
+        if not params['query']:
+            return jsonify({'error': 'query parameter required'}), 400
+
+        resp = http_requests.get(
+            f'{LOKI_URL}/loki/api/v1/query_range',
+            params=params,
+            timeout=15
+        )
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/loki/labels', methods=['GET'])
+def loki_labels():
+    """Loki 라벨 목록"""
+    try:
+        resp = http_requests.get(f'{LOKI_URL}/loki/api/v1/labels', timeout=10)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/loki/label/<label_name>/values', methods=['GET'])
+def loki_label_values(label_name):
+    """Loki 특정 라벨의 값 목록"""
+    try:
+        resp = http_requests.get(
+            f'{LOKI_URL}/loki/api/v1/label/{label_name}/values',
+            timeout=10
+        )
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':

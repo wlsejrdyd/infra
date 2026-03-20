@@ -3,6 +3,7 @@ import { router } from '/assets/js/router.js';
 import { renderOverview, cleanupOverview, setOverviewStatusFilter } from '/assets/js/pages/overview.js';
 import { renderDetail, cleanupDetail } from '/assets/js/pages/detail.js';
 import { renderAdmin, cleanupAdmin } from '/assets/js/pages/admin.js';
+import { renderLogs, cleanupLogs } from '/assets/js/pages/logs.js';
 
 let currentCleanup = null;
 
@@ -41,6 +42,13 @@ function initApp() {
     await renderAdmin(params);
     currentCleanup = cleanupAdmin;
   });
+
+  router.addRoute('/logs', async (params) => {
+    cleanup();
+    setActiveTab('logs');
+    await renderLogs(params);
+    currentCleanup = cleanupLogs;
+  });
 }
 
 /**
@@ -66,7 +74,7 @@ function renderTopbar() {
       <button class="topbar-tab active" data-tab="nodes" onclick="window.location.hash='/overview'">Nodes</button>
       <button class="topbar-tab" data-tab="clusters" onclick="window.location.hash='/overview'" title="Coming soon">Clusters</button>
       <button class="topbar-tab" data-tab="incidents" onclick="window.location.hash='/overview'" title="Coming soon">Incidents</button>
-      <button class="topbar-tab" data-tab="logs" onclick="window.location.hash='/overview'" title="Coming soon">Logs</button>
+      <button class="topbar-tab" data-tab="logs" onclick="window.location.hash='/logs'">Logs</button>
     </div>
 
     <div class="topbar-badges">
