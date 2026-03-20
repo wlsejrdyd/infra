@@ -95,12 +95,12 @@ function showToast(emoji, serverName, label) {
 function clamp(min, val, max) { return Math.min(max, Math.max(min, val)); }
 
 function calcCardStyle(rows, availH) {
-  const MAX_H = 210;
-  const MIN_H = 90;
+  const MAX_H = 230;
+  const MIN_H = 180;
   const rawH = Math.floor((availH - (rows - 1) * GAP) / rows);
   const h = clamp(MIN_H, rawH, MAX_H);
-  const w = Math.floor(h * 1.7);
-  const s = h / 150;
+  const w = Math.floor(h * 1.3);
+  const s = h / 200;
   const usedH = rows * h;
   const extraGap = rows > 1 ? Math.min(Math.floor((availH - usedH) / (rows - 1)), 30) : 0;
   const dynGap = GAP + extraGap;
@@ -500,28 +500,37 @@ function renderNodeCard(server) {
 
   /**
    * 2줄 구조:
-   * 줄1: [라벨]  ~~~sparkline~~~  [값%]
-   * 줄2: [=========progress bar=========]
+   * 줄1: [라벨]          [sparkline작게][값%]
+   * 줄2: [========progress bar========]
    */
-  const sparkH = Math.max(16, Math.round(20 * s));
+  const sparkW = `${Math.max(50, Math.round(70 * s))}px`;
+  const sparkH = `${Math.max(16, Math.round(20 * s))}px`;
   const metricRow = (label, val, type, histKey) => {
-    const color = gc(val, type);
+    const barColor = gc(val, type);
     const pct = off ? 0 : (val || 0);
     const display = off || val == null ? '-- %' : `${val.toFixed(0)}%`;
     const hist = sparklineHistory[histKey];
     const hasHist = hist && hist.length >= 2;
 
+    // 값 색상: 기본 흰색, 경고/위험일 때만 색상
+    const th = (server.thresholds || serversData.defaultThresholds)[type];
+    let valColor = '#E8ECF1'; // 기본 흰색
+    if (off) valColor = '#4B5563';
+    else if (th && val != null) {
+      if (val >= th.critical) valColor = '#EF4444';
+      else if (val >= th.warning) valColor = '#F59E0B';
+    }
+
     return `
       <div style="margin-top:${rowGap};">
-        <div style="display:flex;align-items:flex-end;gap:4px;margin-bottom:${Math.max(2, Math.round(3 * s))}px;">
-          <span style="font-size:${lblFs};font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#A9ABB3;flex-shrink:0;">${label}</span>
-          <div style="flex:1;height:${sparkH}px;position:relative;">
-            ${hasHist ? `<canvas data-sparkline="${histKey}" style="position:absolute;top:0;left:0;width:100%;height:100%;"></canvas>` : ''}
-          </div>
-          <span style="font-size:${valFs};font-weight:700;font-family:'Space Grotesk',monospace;flex-shrink:0;color:${off ? '#4B5563' : color};">${display}</span>
+        <div style="display:flex;align-items:flex-end;margin-bottom:${Math.max(3, Math.round(4 * s))}px;">
+          <span style="font-size:${lblFs};font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#A9ABB3;">${label}</span>
+          <div style="flex:1;"></div>
+          ${hasHist ? `<canvas data-sparkline="${histKey}" style="width:${sparkW};height:${sparkH};flex-shrink:0;margin-right:6px;"></canvas>` : ''}
+          <span style="font-size:${valFs};font-weight:700;font-family:'Space Grotesk',monospace;flex-shrink:0;color:${valColor};">${display}</span>
         </div>
         <div style="height:${barH}px;background:#1C2028;border-radius:2px;overflow:hidden;">
-          <div style="height:100%;width:${pct}%;background:${color};border-radius:2px;transition:all 0.5s ease;"></div>
+          <div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px;transition:all 0.5s ease;"></div>
         </div>
       </div>`;
   };
