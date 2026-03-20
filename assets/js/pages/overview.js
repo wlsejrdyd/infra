@@ -162,11 +162,6 @@ export async function renderOverview() {
           <select class="filter-select" id="projectFilter">
             ${projects.map(p => `<option value="${p}" ${p === currentFilter ? 'selected' : ''}>${p === 'all' ? '전체 프로젝트' : p}</option>`).join('')}
           </select>
-          <div class="view-toggle">
-            <button class="view-btn ${currentRows === 3 ? 'active' : ''}" data-rows="3">3R</button>
-            <button class="view-btn ${currentRows === 5 ? 'active' : ''}" data-rows="5">5R</button>
-          </div>
-          <button class="btn-outline btn" id="alertToggleBtn" title="Slack Alert ON/OFF">${alertEnabled ? '🔔 Slack' : '🔕 Slack'}</button>
         </div>
       </div>
 
@@ -192,30 +187,6 @@ export async function renderOverview() {
   document.getElementById('projectFilter')?.addEventListener('change', (e) => {
     currentFilter = e.target.value;
     renderServerGrid();
-  });
-
-  // 행 토글
-  document.querySelectorAll('.view-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentRows = parseInt(btn.dataset.rows);
-      renderServerGrid();
-    });
-  });
-
-  // 알림 토글
-  document.getElementById('alertToggleBtn')?.addEventListener('click', async () => {
-    alertEnabled = !alertEnabled;
-    const btn = document.getElementById('alertToggleBtn');
-    btn.textContent = alertEnabled ? '🔔 Slack' : '🔕 Slack';
-    try {
-      await fetch('/api/alert/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: alertEnabled })
-      });
-    } catch (e) { console.error('[alert config] save failed:', e); }
   });
 
   // 예약 필터 적용

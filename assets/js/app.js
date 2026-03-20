@@ -91,6 +91,7 @@ function renderTopbar() {
     <div class="topbar-actions">
       <a href="/grafana" target="_blank" class="ext-link grafana" title="Grafana">&#128200; Grafana</a>
       <a href="/prometheus" target="_blank" class="ext-link prometheus" title="Prometheus">&#128293; Prometheus</a>
+      <button class="topbar-btn" id="btnNotification" title="Alerts">&#128276;</button>
       <button class="topbar-btn" title="Settings" onclick="window.location.hash='/admin'">&#9881;</button>
     </div>
   `;
