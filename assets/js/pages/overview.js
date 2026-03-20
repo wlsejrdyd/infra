@@ -543,6 +543,23 @@ function renderNodeCard(server) {
         ${metricRow('CPU', cpu, 'cpu', server.id + '_cpu')}
         ${metricRow('MEM', mem, 'memory', server.id + '_memory')}
         ${metricRow('DISK', disk, 'disk', server.id + '_disk')}
+        ${(() => {
+          if (off) return '';
+          const cpuReq = m.cpuRequestPct, memReq = m.memRequestPct;
+          const th = server.thresholds || serversData.defaultThresholds;
+          const cpuReqTh = th.cpuRequest || { warning: 80, critical: 90 };
+          const memReqTh = th.memoryRequest || { warning: 80, critical: 90 };
+          const alerts = [];
+          if (cpuReq != null && cpuReq >= cpuReqTh.warning) {
+            const c = cpuReq >= cpuReqTh.critical ? '#EF4444' : '#F59E0B';
+            alerts.push(`<span style="color:${c};font-size:0.6rem;font-weight:700;">K8s CPU ${cpuReq.toFixed(0)}%</span>`);
+          }
+          if (memReq != null && memReq >= memReqTh.warning) {
+            const c = memReq >= memReqTh.critical ? '#EF4444' : '#F59E0B';
+            alerts.push(`<span style="color:${c};font-size:0.6rem;font-weight:700;">K8s MEM ${memReq.toFixed(0)}%</span>`);
+          }
+          return alerts.length ? `<div style="margin-top:${rowGap};display:flex;gap:8px;">☸️ ${alerts.join(' ')}</div>` : '';
+        })()}
       </div>
     </div>`;
 }

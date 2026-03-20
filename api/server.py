@@ -305,9 +305,18 @@ def handle_alert():
         state = _load_alert_state()
 
         if status in ('warning', 'critical', 'offline'):
-            # 이미 알림 발송된 서버면 중복 발송 안 함
-            if server_id in state:
-                return jsonify({'skipped': True, 'message': 'Alert already sent'}), 200
+            # 같은 상태면 중복 발송 안 함. 상태가 바뀌면 새 알림 전송.
+            if server_id in state and state[server_id].get('status') == status:
+                return jsonify({'skipped': True, 'message': 'Same status, already sent'}), 200
+
+            # 상태 변경 시 이전 알림 스레드에 변경 알림 + 새 메시지 발송
+            prev_entry = state.get(server_id)
+            if prev_entry and prev_entry.get('status') != status:
+                prev_ts = prev_entry.get('ts')
+                prev_st = prev_entry.get('status', '')
+                if prev_ts:
+                    _slack_reply(SLACK_CHANNEL, prev_ts,
+                        f"🔄 상태 변경: {prev_st} → {status}")
 
             emoji_map = {'warning': '⚠️', 'critical': '🔴', 'offline': '⚫'}
             label_map = {'warning': 'Warning', 'critical': 'Critical', 'offline': 'Offline'}
@@ -338,7 +347,12 @@ def handle_alert():
 
             ts = _slack_post_message(SLACK_CHANNEL, text)
             if ts:
-                state[server_id] = {'ts': ts, 'status': status}
+                state[server_id] = {
+                    'ts': ts,
+                    'status': status,
+                    'serverName': server_name,
+                    'timestamp': datetime.now(timezone.utc).isoformat(),
+                }
                 _save_alert_state(state)
                 return jsonify({'sent': True, 'ts': ts}), 200
             else:
