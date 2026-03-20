@@ -17,6 +17,12 @@ function initApp() {
 
   // 라우트 등록
   router.addRoute('/overview', async (params) => {
+    // 모달이 열려있으면 모달만 닫기 (overview 재렌더 방지)
+    const existingModal = document.getElementById('detailModal');
+    if (existingModal) {
+      cleanupDetail();
+      return;
+    }
     cleanup();
     setActiveTab('nodes');
     await renderOverview(params);
@@ -24,10 +30,9 @@ function initApp() {
   });
 
   router.addRoute('/server/:id', async (params) => {
-    cleanup();
+    // overview를 파괴하지 않고 모달을 오버레이
     setActiveTab('nodes');
     await renderDetail(params);
-    currentCleanup = cleanupDetail;
   });
 
   router.addRoute('/admin', async (params) => {
