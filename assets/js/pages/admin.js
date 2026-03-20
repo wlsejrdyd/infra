@@ -227,7 +227,7 @@ echo "=== 설정 확인 ===" && cat agent_config.json</code>
       <button class="btn" id="copyPushStep1" style="font-size:0.7rem;margin-bottom:0.75rem;">Step 1 복사</button>
 
       <div style="font-size:0.72rem;font-weight:600;color:#10B981;margin-bottom:0.3rem;">Step 2. systemd 서비스 등록 + 시작</div>
-      <code id="pushStep2" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">sudo cat > /etc/systemd/system/sim-mon-agent.service << 'EOF'
+      <code id="pushStep2" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">sudo tee /etc/systemd/system/sim-mon-agent.service > /dev/null << 'EOF'
 [Unit]
 Description=SIM Monitoring Agent
 After=network.target
