@@ -54,8 +54,7 @@ function renderTopbar() {
   const topbar = document.getElementById('topbar');
   topbar.innerHTML = `
     <div class="topbar-brand" onclick="window.location.hash='/overview'">
-      <h1>SENTINEL</h1>
-      <span class="version">v1.0.0</span>
+      <h1>Simplatform Monitoring</h1>
     </div>
 
     <div class="topbar-tabs">
@@ -68,15 +67,19 @@ function renderTopbar() {
     <div class="topbar-badges">
       <div class="status-pill healthy" data-status="healthy">
         <span class="pill-dot"></span>
-        <span>HEALTHY: <strong id="pillOk">-</strong></span>
+        <span>정상: <strong id="pillOk">-</strong></span>
       </div>
       <div class="status-pill warning" data-status="warning">
         <span class="pill-dot"></span>
-        <span>WARNING: <strong id="pillWarn">-</strong></span>
+        <span>경고: <strong id="pillWarn">-</strong></span>
       </div>
       <div class="status-pill danger" data-status="critical">
         <span class="pill-dot"></span>
-        <span>DANGER: <strong id="pillCrit">-</strong></span>
+        <span>위험: <strong id="pillCrit">-</strong></span>
+      </div>
+      <div class="status-pill offline" data-status="offline">
+        <span class="pill-dot"></span>
+        <span>오프라인: <strong id="pillOff">-</strong></span>
       </div>
     </div>
 
@@ -86,9 +89,10 @@ function renderTopbar() {
     </div>
 
     <div class="topbar-actions">
+      <a href="/grafana" target="_blank" class="ext-link grafana" title="Grafana">&#128200; Grafana</a>
+      <a href="/prometheus" target="_blank" class="ext-link prometheus" title="Prometheus">&#128293; Prometheus</a>
       <button class="topbar-btn has-notification" id="btnNotification" title="Alerts">&#128276;</button>
       <button class="topbar-btn" title="Settings" onclick="window.location.hash='/admin'">&#9881;</button>
-      <button class="topbar-btn" title="Account">&#128100;</button>
     </div>
   `;
 
@@ -145,10 +149,12 @@ export function updateTopbarBadges(counts) {
   const ok = document.getElementById('pillOk');
   const warn = document.getElementById('pillWarn');
   const crit = document.getElementById('pillCrit');
+  const off = document.getElementById('pillOff');
 
   if (ok) ok.textContent = counts.healthy || 0;
   if (warn) warn.textContent = counts.warning || 0;
   if (crit) crit.textContent = counts.critical || 0;
+  if (off) off.textContent = counts.offline || 0;
 
   // 시스템 상태
   const sbStatus = document.getElementById('sbSystemStatus');

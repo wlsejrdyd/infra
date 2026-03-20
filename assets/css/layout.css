@@ -128,6 +128,12 @@ body {
 }
 .status-pill.danger .pill-dot { background: var(--danger); }
 
+.status-pill.offline {
+  background: rgba(107, 122, 144, 0.12);
+  color: var(--text-muted);
+}
+.status-pill.offline .pill-dot { background: var(--text-muted); }
+
 /* Search */
 .topbar-search {
   display: flex;

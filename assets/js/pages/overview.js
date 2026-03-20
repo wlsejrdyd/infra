@@ -9,6 +9,7 @@ let currentSearchQuery = '';
 let currentRows = 3;
 let updateInterval = null;
 let previousStatusMap = {};
+const sparklineHistory = {}; // serverId_cpu → [...], serverId_mem → [...]
 
 // 슬라이딩 & 드래그
 let slideAnim = null;
@@ -139,10 +140,8 @@ export async function renderOverview() {
   // 글로벌 핸들러 등록
   window.__overviewProjectFilter = (project) => {
     currentFilter = currentFilter === project ? 'all' : project;
-    // 필터 버튼 활성화 업데이트
-    document.querySelectorAll('.project-filter-btn[data-project]').forEach(b => {
-      b.classList.toggle('active', b.dataset.project === currentFilter);
-    });
+    const sel = document.getElementById('projectFilter');
+    if (sel) sel.value = currentFilter;
     renderServerGrid();
   };
 
@@ -155,13 +154,13 @@ export async function renderOverview() {
     <div class="overview-layout">
       <div class="overview-header">
         <div>
-          <h2>System Resource Overview</h2>
-          <div class="overview-subtitle" id="overviewSubtitle">Real-time status of ${serversData.servers.length} infrastructure nodes</div>
+          <h2>서버 리소스 현황</h2>
+          <div class="overview-subtitle" id="overviewSubtitle">${serversData.servers.length}개 서버 · ${projects.length - 1}개 프로젝트 실시간 모니터링</div>
         </div>
         <div class="overview-header-actions">
-          <div class="project-filter" id="projectFilter">
-            ${projects.map(p => `<button class="project-filter-btn ${p === currentFilter ? 'active' : ''}" data-project="${p}">${p === 'all' ? 'ALL' : p}</button>`).join('')}
-          </div>
+          <select class="filter-select" id="projectFilter">
+            ${projects.map(p => `<option value="${p}" ${p === currentFilter ? 'selected' : ''}>${p === 'all' ? '전체 프로젝트' : p}</option>`).join('')}
+          </select>
           <div class="view-toggle">
             <button class="view-btn ${currentRows === 3 ? 'active' : ''}" data-rows="3">3R</button>
             <button class="view-btn ${currentRows === 5 ? 'active' : ''}" data-rows="5">5R</button>
@@ -188,14 +187,10 @@ export async function renderOverview() {
     </div>
   `;
 
-  // 프로젝트 필터
-  document.querySelectorAll('.project-filter-btn[data-project]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.project-filter-btn[data-project]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentFilter = btn.dataset.project;
-      renderServerGrid();
-    });
+  // 프로젝트 필터 (셀렉트박스)
+  document.getElementById('projectFilter')?.addEventListener('change', (e) => {
+    currentFilter = e.target.value;
+    renderServerGrid();
   });
 
   // 행 토글
@@ -322,6 +317,21 @@ async function updateServerGrid() {
     }
 
     server._metrics = metrics;
+
+    // sparkline 히스토리 누적 (CPU/MEM, 최근 20개)
+    const cpuKey = server.id + '_cpu';
+    const memKey = server.id + '_mem';
+    if (!sparklineHistory[cpuKey]) sparklineHistory[cpuKey] = [];
+    if (!sparklineHistory[memKey]) sparklineHistory[memKey] = [];
+    if (metrics.cpu != null) {
+      sparklineHistory[cpuKey].push(metrics.cpu);
+      if (sparklineHistory[cpuKey].length > 20) sparklineHistory[cpuKey].shift();
+    }
+    if (metrics.memory != null) {
+      sparklineHistory[memKey].push(metrics.memory);
+      if (sparklineHistory[memKey].length > 20) sparklineHistory[memKey].shift();
+    }
+
     const th = server.thresholds || serversData.defaultThresholds;
     const status = getServerStatus(metrics, th);
     server._status = status;
@@ -362,7 +372,7 @@ async function updateServerGrid() {
   const sub = document.getElementById('overviewSubtitle');
   if (sub) {
     const projectCount = new Set(serversData.servers.map(s => s.project)).size;
-    sub.textContent = `Real-time status of ${serversData.servers.length} infrastructure nodes across ${projectCount} clusters`;
+    sub.textContent = `${serversData.servers.length}개 서버 · ${projectCount}개 프로젝트 실시간 모니터링`;
   }
 
   renderServerGrid();
@@ -417,6 +427,7 @@ function renderServerGrid() {
         pinnedSection.style.display = '';
         pinnedGrid.style.gap = dg + 'px';
         pinnedGrid.innerHTML = pinned.map(s => renderNodeCard(s)).join('');
+        drawAllSparklines(pinnedGrid);
       } else {
         pinnedSection.style.display = 'none';
       }
@@ -433,6 +444,9 @@ function renderServerGrid() {
     }
 
     track.innerHTML = scrolling.map(s => renderNodeCard(s)).join('');
+
+    // sparkline 그리기
+    drawAllSparklines();
 
     const colCount = Math.ceil(scrolling.length / currentRows);
     const contentW = colCount * cardStyle.width + (colCount - 1) * dg;
@@ -451,59 +465,95 @@ function renderNodeCard(server) {
   const status = server._status || 'offline';
   const off = status === 'offline';
 
-  // 상태별 보더 색상
-  const borderColor = status === 'critical' ? 'var(--danger)'
-    : status === 'warning' ? 'var(--warning)'
-    : 'var(--border)';
+  // 상태별 스타일
+  const borderColor = status === 'critical' ? 'rgba(255,92,92,0.5)'
+    : status === 'warning' ? 'rgba(245,166,35,0.4)'
+    : status === 'offline' ? 'rgba(61,74,92,0.3)'
+    : 'rgba(30,39,54,0.8)';
 
-  // 상태별 배경 글로우
-  const bgGlow = status === 'critical' ? 'rgba(255,92,92,0.04)'
-    : status === 'warning' ? 'rgba(245,166,35,0.04)'
-    : 'transparent';
+  const cardBg = status === 'critical'
+    ? 'linear-gradient(160deg, rgba(255,92,92,0.12) 0%, rgba(26,31,43,0.95) 60%)'
+    : status === 'warning'
+    ? 'linear-gradient(160deg, rgba(245,166,35,0.10) 0%, rgba(26,31,43,0.95) 60%)'
+    : status === 'offline'
+    ? '#151a24'
+    : '#1A1F2B';
 
-  // 프로젝트 라벨 색상
-  const projColor = status === 'critical' ? 'var(--danger)'
-    : status === 'warning' ? 'var(--warning)'
-    : 'var(--accent)';
+  const projColor = status === 'critical' ? '#FF5C5C'
+    : status === 'warning' ? '#F5A623'
+    : status === 'offline' ? '#3D4A5C'
+    : '#69F6B8';
+
+  const ledColor = status === 'critical' ? '#FF5C5C'
+    : status === 'warning' ? '#F5A623'
+    : status === 'healthy' ? '#69F6B8'
+    : '#3D4A5C';
 
   const gc = (val, type) => {
-    if (!val && val !== 0) return 'var(--text-dim)';
+    if (val == null) return '#3D4A5C';
     const th = (server.thresholds || serversData.defaultThresholds)[type];
-    if (!th) return 'var(--success)';
-    if (val >= th.critical) return 'var(--danger)';
-    if (val >= th.warning) return 'var(--warning)';
-    return 'var(--success)';
+    if (!th) return '#69F6B8';
+    if (val >= th.critical) return '#FF5C5C';
+    if (val >= th.warning) return '#F5A623';
+    return '#69F6B8';
   };
 
   const cpu = metrics.cpu;
   const mem = metrics.memory;
   const disk = metrics.disk;
 
+  // sparkline 데이터 유무 확인 (CPU, MEM)
+  const cpuHist = sparklineHistory[server.id];
+  const hasSparkline = cpuHist && cpuHist.length >= 2;
+
+  // 메트릭 행 렌더 — sparkline은 프로그레스바 영역에 오버레이
+  const metricRow = (label, val, type, sparkId) => {
+    const color = gc(val, type);
+    const pct = off ? 0 : (val || 0);
+    const display = off || val == null ? '-- %' : `${val.toFixed(0)}%`;
+    const barH = v.barH;
+
+    // sparkline이 있는 행: 바 영역을 relative로 만들고 canvas 오버레이
+    const sparkHtml = sparkId && hasSparkline
+      ? `<canvas data-sparkline="${sparkId}" width="60" height="20" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>`
+      : '';
+
+    return `
+      <div style="display:flex;align-items:center;gap:6px;margin-top:${v.metricGap};">
+        <span style="font-size:${v.lblSize};color:#6B7A90;min-width:${v.labelW};font-weight:600;">${label}</span>
+        <div style="flex:1;position:relative;height:${sparkId && hasSparkline ? '20px' : barH};">
+          <div style="position:absolute;bottom:0;left:0;right:0;height:${barH};background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:${color};border-radius:2px;transition:width 0.4s;"></div>
+          </div>
+          ${sparkHtml}
+        </div>
+        <span style="font-size:${v.valSize};font-weight:700;font-family:var(--font-brand);min-width:${v.valW};text-align:right;color:${off ? '#3D4A5C' : color};">${display}</span>
+      </div>`;
+  };
+
+  // offline 하단 텍스트
+  const offlineLabel = off
+    ? `<div style="text-align:center;font-size:${v.projSize};color:#3D4A5C;margin-top:auto;letter-spacing:0.5px;">STATUS: OFFLINE</div>`
+    : '';
+
   return `
-    <div style="background:${bgGlow};border:1px solid ${borderColor};border-radius:${v.radius};padding:${v.pad};cursor:pointer;width:${v.width}px;height:${v.height}px;flex-shrink:0;transition:all 0.2s;overflow:hidden;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;position:relative;"
-         onmouseover="this.style.borderColor='var(--accent)';this.style.boxShadow='0 4px 20px rgba(105,246,184,0.08)'"
+    <div style="background:${cardBg};border:1px solid ${borderColor};border-radius:${v.radius};padding:${v.pad};cursor:pointer;width:${v.width}px;height:${v.height}px;flex-shrink:0;transition:all 0.2s;overflow:hidden;box-sizing:border-box;display:flex;flex-direction:column;position:relative;"
+         onmouseover="this.style.borderColor='#69F6B8';this.style.boxShadow='0 4px 24px rgba(105,246,184,0.10)'"
          onmouseout="this.style.borderColor='${borderColor}';this.style.boxShadow='none'"
          onclick="if(!window._wasDragged)window.location.hash='/server/${server.id}'">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${v.nameMb};">
         <div style="overflow:hidden;flex:1;">
           <div style="font-size:${v.projSize};font-weight:700;color:${projColor};text-transform:uppercase;letter-spacing:0.5px;">${server.project || ''}</div>
-          <div style="font-size:${v.nameSize};font-weight:700;font-family:var(--font-brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);margin-top:1px;">${server.name}</div>
+          <div style="font-size:${v.nameSize};font-weight:700;font-family:var(--font-brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#E8ECF1;margin-top:2px;">${server.name}</div>
         </div>
-        <div style="width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:2px;background:${status === 'critical' ? 'var(--danger)' : status === 'warning' ? 'var(--warning)' : status === 'healthy' ? 'var(--success)' : 'var(--text-muted)'};${status !== 'offline' ? 'animation:pulse 2s infinite;' : ''}"></div>
+        <div style="width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px;background:${ledColor};${status !== 'offline' ? 'animation:pulse 2s infinite;' : ''}"></div>
       </div>
-      ${[
-        { label: 'CPU',  val: cpu,  type: 'cpu' },
-        { label: 'MEM',  val: mem,  type: 'memory' },
-        { label: 'DISK', val: disk, type: 'disk' },
-      ].map((m, i) => `
-        <div style="display:flex;align-items:center;gap:4px;${i ? 'margin-top:' + v.metricGap + ';' : ''}">
-          <span style="font-size:${v.lblSize};color:var(--text-dim);min-width:${v.labelW};font-weight:600;">${m.label}</span>
-          <div style="flex:1;height:${v.barH};background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
-            <div style="height:100%;width:${off ? 0 : (m.val || 0)}%;background:${gc(m.val, m.type)};border-radius:2px;transition:width 0.4s;"></div>
-          </div>
-          <span style="font-size:${v.valSize};font-weight:700;font-family:var(--font-brand);min-width:${v.valW};text-align:right;color:${gc(m.val, m.type)};">${off || m.val == null ? '--' : m.val.toFixed(0)}%</span>
-        </div>
-      `).join('')}
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:center;">
+        ${metricRow('CPU', cpu, 'cpu', server.id + '_cpu')}
+        ${metricRow('MEM', mem, 'memory', server.id + '_mem')}
+        ${metricRow('DISK', disk, 'disk', null)}
+      </div>
+      ${offlineLabel}
     </div>`;
 }
 
@@ -541,6 +591,64 @@ function startSliding(maxScroll) {
 
 function stopSliding() {
   if (slideAnim) { cancelAnimationFrame(slideAnim); slideAnim = null; }
+}
+
+/**
+ * Sparkline 그리기 (모든 canvas[data-sparkline])
+ */
+function drawAllSparklines(container) {
+  const root = container || document;
+  root.querySelectorAll('canvas[data-sparkline]').forEach(canvas => {
+    const key = canvas.dataset.sparkline;
+    const data = sparklineHistory[key];
+    if (!data || data.length < 2) return;
+
+    // canvas를 실제 표시 크기에 맞춤 (고해상도 대응)
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0) return;
+    canvas.width = rect.width * 2;
+    canvas.height = rect.height * 2;
+
+    const ctx = canvas.getContext('2d');
+    ctx.scale(2, 2);
+    const w = rect.width;
+    const h = rect.height;
+    const pad = 2;
+
+    ctx.clearRect(0, 0, w, h);
+
+    const max = Math.max(...data, 100);
+    const min = Math.min(...data, 0);
+    const range = max - min || 1;
+    const step = (w - pad * 2) / (data.length - 1);
+
+    // 색상: 마지막 값 기준
+    const last = data[data.length - 1];
+    const color = last >= 90 ? '#FF5C5C' : last >= 70 ? '#F5A623' : '#69F6B8';
+
+    // 선 그리기
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    data.forEach((v, i) => {
+      const x = pad + i * step;
+      const y = h - pad - ((v - min) / range) * (h - pad * 2);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // 영역 채우기 (반투명)
+    ctx.lineTo(pad + (data.length - 1) * step, h);
+    ctx.lineTo(pad, h);
+    ctx.closePath();
+    ctx.globalAlpha = 0.12;
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
 }
 
 function getServerStatus(metrics, thresholds) {
