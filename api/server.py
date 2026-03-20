@@ -53,6 +53,8 @@ PUSH_API_KEY = os.environ.get('PUSH_API_KEY', '')
 
 # Loki 설정
 LOKI_URL = os.environ.get('LOKI_URL', 'http://localhost:3100')
+LOKI_ORG_ID = os.environ.get('LOKI_ORG_ID', 'fake')
+LOKI_HEADERS = lambda: {'X-Scope-OrgID': LOKI_ORG_ID}
 
 @app.route('/api/servers', methods=['GET'])
 def get_servers():
@@ -548,6 +550,7 @@ def loki_query_range():
         resp = http_requests.get(
             f'{LOKI_URL}/loki/api/v1/query_range',
             params=params,
+            headers=LOKI_HEADERS(),
             timeout=15
         )
         return jsonify(resp.json()), resp.status_code
@@ -559,7 +562,7 @@ def loki_query_range():
 def loki_labels():
     """Loki 라벨 목록"""
     try:
-        resp = http_requests.get(f'{LOKI_URL}/loki/api/v1/labels', timeout=10)
+        resp = http_requests.get(f'{LOKI_URL}/loki/api/v1/labels', headers=LOKI_HEADERS(), timeout=10)
         return jsonify(resp.json()), resp.status_code
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -571,6 +574,7 @@ def loki_label_values(label_name):
     try:
         resp = http_requests.get(
             f'{LOKI_URL}/loki/api/v1/label/{label_name}/values',
+            headers=LOKI_HEADERS(),
             timeout=10
         )
         return jsonify(resp.json()), resp.status_code
