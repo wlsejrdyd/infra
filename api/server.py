@@ -258,6 +258,18 @@ def get_alert_state():
     return jsonify(_load_alert_state()), 200
 
 
+@app.route('/api/alert/state/<server_id>', methods=['DELETE'])
+def delete_alert_state(server_id):
+    """특정 서버 알림 상태 삭제 (수동 해제)"""
+    with _alert_lock:
+        state = _load_alert_state()
+        if server_id in state:
+            del state[server_id]
+            _save_alert_state(state)
+            return jsonify({'deleted': True}), 200
+        return jsonify({'error': 'Not found'}), 404
+
+
 @app.route('/api/alert/config', methods=['GET'])
 def get_alert_config():
     """알림 설정 조회"""
@@ -352,6 +364,7 @@ def handle_alert():
                     'status': status,
                     'serverName': server_name,
                     'timestamp': datetime.now(timezone.utc).isoformat(),
+                    'metrics': metrics or {},
                 }
                 _save_alert_state(state)
                 return jsonify({'sent': True, 'ts': ts}), 200

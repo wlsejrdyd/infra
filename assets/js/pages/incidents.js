@@ -66,6 +66,14 @@ export async function renderIncidents() {
     });
   });
 
+  // DISMISS 버튼 → 알림 해제
+  window.__dismissAlert = async (serverId) => {
+    try {
+      await fetch(`/api/alert/state/${encodeURIComponent(serverId)}`, { method: 'DELETE' });
+      await loadIncidents();
+    } catch (e) { console.error('dismiss failed:', e); }
+  };
+
   // LOGS 버튼 → 해당 서버 이름으로 로그 검색
   window.__goToServerLogs = (serverName) => {
     window._pendingLogSearch = serverName;
@@ -88,7 +96,7 @@ async function loadIncidents() {
     status: info.status || 'unknown',
     timestamp: info.timestamp || null,
     ts: info.ts || null,
-    thread_ts: info.thread_ts || null,
+    metrics: info.metrics || {},
     isSSL: id.startsWith('ssl:'),
     resolved: info.status === 'healthy' || info.status === 'recovered',
   }));
@@ -151,24 +159,40 @@ function renderList() {
       : `<span style="color:#6B7A90;font-size:0.7rem;font-weight:600;">${inc.status}</span>`;
 
     const time = inc.timestamp ? formatTime(inc.timestamp) : '--';
-    const title = inc.isSSL ? `SSL Certificate: ${inc.serverName}` : `${inc.status === 'critical' ? 'High' : 'Elevated'} resource usage on ${inc.serverName}`;
+
+    // 원인 상세: 메트릭 기반
+    const m = inc.metrics || {};
+    let cause = '';
+    if (inc.isSSL) {
+      cause = `SSL 인증서 만료 임박 (${m.daysRemaining || '?'}일)`;
+    } else if (inc.status === 'offline') {
+      cause = '서버 연결 불가 (Prometheus scrape 실패 또는 Push 미수신)';
+    } else {
+      const parts = [];
+      if (m.cpu) parts.push(`CPU ${m.cpu}%`);
+      if (m.memory) parts.push(`MEM ${m.memory}%`);
+      if (m.disk) parts.push(`DISK ${m.disk}%`);
+      if (m.cpuRequest) parts.push(`K8s CPU Req ${m.cpuRequest}%`);
+      if (m.memoryRequest) parts.push(`K8s MEM Req ${m.memoryRequest}%`);
+      cause = parts.length > 0 ? parts.join(' · ') : '상세 정보 없음';
+    }
 
     return `
       <div style="display:flex;align-items:center;padding:12px 16px;border-left:3px solid ${borderColor};background:#151a24;border-radius:0 3px 3px 0;margin-bottom:6px;${inc.resolved ? 'opacity:0.6;' : ''}">
-        <div style="width:60px;flex-shrink:0;">${statusIcon}</div>
+        <div style="width:50px;flex-shrink:0;">${statusIcon}</div>
         <div style="flex:1;min-width:0;">
-          <div style="font-size:0.85rem;font-weight:600;margin-bottom:2px;">${title}</div>
+          <div style="font-size:0.85rem;font-weight:600;margin-bottom:3px;">${inc.serverName}</div>
+          <div style="font-size:0.72rem;color:#A9ABB3;margin-bottom:3px;">${cause}</div>
           <div style="display:flex;gap:8px;align-items:center;">
-            <span style="font-size:0.65rem;padding:2px 6px;background:#1C2028;border-radius:2px;color:#A9ABB3;font-family:monospace;">${inc.id}</span>
+            <span style="font-size:0.62rem;padding:2px 6px;background:#1C2028;border-radius:2px;color:#6B7A90;font-family:monospace;">${inc.id}</span>
             ${statusLabel}
           </div>
         </div>
-        <div style="width:160px;flex-shrink:0;font-size:0.75rem;color:#6B7A90;">${time}</div>
-        <div style="width:100px;flex-shrink:0;text-align:right;">
-          ${inc.resolved
-            ? `<button class="btn" style="font-size:0.68rem;padding:3px 10px;" onclick="window.__goToServerLogs('${inc.serverName}')">HISTORY</button>`
-            : `<button class="btn" style="font-size:0.68rem;padding:3px 10px;margin-right:4px;" onclick="window.__goToServerLogs('${inc.serverName}')">LOGS</button><button class="btn btn-primary" style="font-size:0.68rem;padding:3px 10px;" onclick="window.location.hash='/server/${inc.id}'">VIEW</button>`
-          }
+        <div style="width:140px;flex-shrink:0;font-size:0.72rem;color:#6B7A90;">${time}</div>
+        <div style="width:160px;flex-shrink:0;text-align:right;display:flex;gap:4px;justify-content:flex-end;">
+          <button class="btn" style="font-size:0.65rem;padding:3px 8px;" onclick="window.__goToServerLogs('${inc.serverName}')">LOGS</button>
+          ${!inc.resolved ? `<button class="btn btn-primary" style="font-size:0.65rem;padding:3px 8px;" onclick="window.location.hash='/server/${inc.id}'">VIEW</button>` : ''}
+          <button class="btn" style="font-size:0.65rem;padding:3px 8px;color:#6B7A90;" onclick="window.__dismissAlert('${inc.id}')" title="알림 해제">✕</button>
         </div>
       </div>`;
   }).join('');
