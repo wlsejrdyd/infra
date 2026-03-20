@@ -95,8 +95,8 @@ function showToast(emoji, serverName, label) {
 function clamp(min, val, max) { return Math.min(max, Math.max(min, val)); }
 
 function calcCardStyle(rows, availH) {
-  const MAX_H = 210;
-  const MIN_H = 190;
+  const MAX_H = 230;
+  const MIN_H = 210;
   const rawH = Math.floor((availH - (rows - 1) * GAP) / rows);
   const h = clamp(MIN_H, rawH, MAX_H);
   const w = Math.floor(h * 1.9);
@@ -503,7 +503,7 @@ function renderNodeCard(server) {
    * 줄2: [=========progress bar=========]
    */
   const sparkW = Math.max(50, Math.round(60 * s));
-  const sparkH = Math.max(14, Math.round(16 * s));
+  const sparkH = 14;
 
   const metricRow = (label, val, type, histKey) => {
     const barColor = gc(val, type);
