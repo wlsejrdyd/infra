@@ -9,7 +9,7 @@ let currentSearchQuery = '';
 let currentRows = 3;
 let updateInterval = null;
 let previousStatusMap = {};
-const sparklineHistory = {}; // serverId_cpu → [...], serverId_mem → [...]
+const sparklineHistory = {}; // key: serverId_cpu, serverId_mem, serverId_disk → [val, ...] (최근 20개)
 
 // 슬라이딩 & 드래그
 let slideAnim = null;
@@ -318,19 +318,16 @@ async function updateServerGrid() {
 
     server._metrics = metrics;
 
-    // sparkline 히스토리 누적 (CPU/MEM, 최근 20개)
-    const cpuKey = server.id + '_cpu';
-    const memKey = server.id + '_mem';
-    if (!sparklineHistory[cpuKey]) sparklineHistory[cpuKey] = [];
-    if (!sparklineHistory[memKey]) sparklineHistory[memKey] = [];
-    if (metrics.cpu != null) {
-      sparklineHistory[cpuKey].push(metrics.cpu);
-      if (sparklineHistory[cpuKey].length > 20) sparklineHistory[cpuKey].shift();
-    }
-    if (metrics.memory != null) {
-      sparklineHistory[memKey].push(metrics.memory);
-      if (sparklineHistory[memKey].length > 20) sparklineHistory[memKey].shift();
-    }
+    // sparkline 히스토리 누적 (CPU/MEM/DISK, 최근 20개)
+    ['cpu', 'memory', 'disk'].forEach(type => {
+      const key = server.id + '_' + type;
+      if (!sparklineHistory[key]) sparklineHistory[key] = [];
+      const val = type === 'memory' ? metrics.memory : metrics[type];
+      if (val != null) {
+        sparklineHistory[key].push(val);
+        if (sparklineHistory[key].length > 20) sparklineHistory[key].shift();
+      }
+    });
 
     const th = server.thresholds || serversData.defaultThresholds;
     const status = getServerStatus(metrics, th);
@@ -461,97 +458,89 @@ function renderServerGrid() {
  */
 function renderNodeCard(server) {
   const v = cardStyle;
-  const metrics = server._metrics || {};
+  const m = server._metrics || {};
   const status = server._status || 'offline';
   const off = status === 'offline';
+  const s = v.height / 100; // 스케일 팩터
 
-  // 상태별 스타일
-  const borderColor = status === 'critical' ? 'rgba(255,92,92,0.5)'
-    : status === 'warning' ? 'rgba(245,166,35,0.4)'
-    : status === 'offline' ? 'rgba(61,74,92,0.3)'
-    : 'rgba(30,39,54,0.8)';
+  // ── 상태별 스타일 (명세서 섹션 3) ──
+  const stateStyles = {
+    healthy:  { border: '#1E2736', bg: '#1A1F2B', shadow: 'none', proj: '#10B981', led: '#10B981', opacity: '1', filter: 'none' },
+    warning:  { border: 'rgba(245,158,11,0.45)', bg: 'linear-gradient(160deg, rgba(245,158,11,0.08) 0%, #1A1F2B 55%)', shadow: '0 0 15px rgba(245,158,11,0.06)', proj: '#F59E0B', led: '#F59E0B', opacity: '1', filter: 'none' },
+    critical: { border: 'rgba(239,68,68,0.45)', bg: 'linear-gradient(160deg, rgba(239,68,68,0.10) 0%, #1A1F2B 55%)', shadow: '0 0 20px rgba(239,68,68,0.10)', proj: '#EF4444', led: '#EF4444', opacity: '1', filter: 'none' },
+    offline:  { border: '#1E2736', bg: '#151a24', shadow: 'none', proj: '#4B5563', led: '#4B5563', opacity: '0.5', filter: 'grayscale(0.6)' },
+  };
+  const st = stateStyles[status] || stateStyles.offline;
 
-  const cardBg = status === 'critical'
-    ? 'linear-gradient(160deg, rgba(255,92,92,0.12) 0%, rgba(26,31,43,0.95) 60%)'
-    : status === 'warning'
-    ? 'linear-gradient(160deg, rgba(245,166,35,0.10) 0%, rgba(26,31,43,0.95) 60%)'
-    : status === 'offline'
-    ? '#151a24'
-    : '#1A1F2B';
-
-  const projColor = status === 'critical' ? '#FF5C5C'
-    : status === 'warning' ? '#F5A623'
-    : status === 'offline' ? '#3D4A5C'
-    : '#69F6B8';
-
-  const ledColor = status === 'critical' ? '#FF5C5C'
-    : status === 'warning' ? '#F5A623'
-    : status === 'healthy' ? '#69F6B8'
-    : '#3D4A5C';
-
+  // ── 메트릭 색상 ──
   const gc = (val, type) => {
-    if (val == null) return '#3D4A5C';
+    if (val == null) return '#4B5563';
     const th = (server.thresholds || serversData.defaultThresholds)[type];
-    if (!th) return '#69F6B8';
-    if (val >= th.critical) return '#FF5C5C';
-    if (val >= th.warning) return '#F5A623';
-    return '#69F6B8';
+    if (!th) return '#10B981';
+    if (val >= th.critical) return '#EF4444';
+    if (val >= th.warning) return '#F59E0B';
+    return '#10B981';
   };
 
-  const cpu = metrics.cpu;
-  const mem = metrics.memory;
-  const disk = metrics.disk;
+  const cpu = m.cpu, mem = m.memory, disk = m.disk;
 
-  // sparkline 데이터 유무 확인 (CPU, MEM)
-  const cpuHist = sparklineHistory[server.id];
-  const hasSparkline = cpuHist && cpuHist.length >= 2;
+  // ── 메트릭 행 (명세서 섹션 4, 5) ──
+  const barH = Math.max(4, Math.round(6 * s));
+  const sparkH = Math.max(18, Math.round(24 * s));
+  const lblFs = `${clamp(0.55, 0.68 * s, 0.85).toFixed(2)}rem`;
+  const valFs = `${clamp(0.55, 0.72 * s, 0.95).toFixed(2)}rem`;
+  const lblW = `${Math.max(24, Math.round(34 * s))}px`;
+  const valW = `${Math.max(28, Math.round(38 * s))}px`;
+  const rowGap = `${Math.max(4, Math.round(8 * s))}px`;
 
-  // 메트릭 행 렌더 — sparkline은 프로그레스바 영역에 오버레이
-  const metricRow = (label, val, type, sparkId) => {
+  const metricRow = (label, val, type, histKey) => {
     const color = gc(val, type);
     const pct = off ? 0 : (val || 0);
     const display = off || val == null ? '-- %' : `${val.toFixed(0)}%`;
-    const barH = v.barH;
-
-    // sparkline이 있는 행: 바 영역을 relative로 만들고 canvas 오버레이
-    const sparkHtml = sparkId && hasSparkline
-      ? `<canvas data-sparkline="${sparkId}" width="60" height="20" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>`
-      : '';
+    const hist = sparklineHistory[histKey];
+    const hasHist = hist && hist.length >= 2;
 
     return `
-      <div style="display:flex;align-items:center;gap:6px;margin-top:${v.metricGap};">
-        <span style="font-size:${v.lblSize};color:#6B7A90;min-width:${v.labelW};font-weight:600;">${label}</span>
-        <div style="flex:1;position:relative;height:${sparkId && hasSparkline ? '20px' : barH};">
-          <div style="position:absolute;bottom:0;left:0;right:0;height:${barH};background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
-            <div style="height:100%;width:${pct}%;background:${color};border-radius:2px;transition:width 0.4s;"></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:${rowGap};">
+        <span style="font-size:${lblFs};font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#A9ABB3;min-width:${lblW};">${label}</span>
+        <div style="flex:1;position:relative;height:${hasHist ? sparkH + 'px' : barH + 'px'};">
+          <div style="position:absolute;bottom:0;left:0;right:0;height:${barH}px;background:#1C2028;border-radius:3px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:all 0.5s ease;"></div>
           </div>
-          ${sparkHtml}
+          ${hasHist ? `<canvas data-sparkline="${histKey}" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>` : ''}
         </div>
-        <span style="font-size:${v.valSize};font-weight:700;font-family:var(--font-brand);min-width:${v.valW};text-align:right;color:${off ? '#3D4A5C' : color};">${display}</span>
+        <span style="font-size:${valFs};font-weight:700;font-family:'Space Grotesk',var(--font-brand),monospace;min-width:${valW};text-align:right;color:${off ? '#4B5563' : color};">${display}</span>
       </div>`;
   };
 
-  // offline 하단 텍스트
+  // ── 카드 사이즈 ──
+  const pad = `${Math.max(8, Math.round(16 * s))}px`;
+  const radius = `${Math.max(8, Math.round(10 * s))}px`;
+  const nameFs = `${clamp(0.7, 1.05 * s, 1.3).toFixed(2)}rem`;
+  const projFs = `${clamp(0.5, 0.62 * s, 0.75).toFixed(2)}rem`;
+  const nameMb = `${Math.max(4, Math.round(8 * s))}px`;
+
+  // ── offline 하단 라벨 ──
   const offlineLabel = off
-    ? `<div style="text-align:center;font-size:${v.projSize};color:#3D4A5C;margin-top:auto;letter-spacing:0.5px;">STATUS: OFFLINE</div>`
+    ? `<div style="text-align:center;font-size:${projFs};color:#4B5563;margin-top:auto;letter-spacing:1px;font-weight:600;">STATUS: OFFLINE</div>`
     : '';
 
   return `
-    <div style="background:${cardBg};border:1px solid ${borderColor};border-radius:${v.radius};padding:${v.pad};cursor:pointer;width:${v.width}px;height:${v.height}px;flex-shrink:0;transition:all 0.2s;overflow:hidden;box-sizing:border-box;display:flex;flex-direction:column;position:relative;"
-         onmouseover="this.style.borderColor='#69F6B8';this.style.boxShadow='0 4px 24px rgba(105,246,184,0.10)'"
-         onmouseout="this.style.borderColor='${borderColor}';this.style.boxShadow='none'"
+    <div style="background:${st.bg};border:1px solid ${st.border};border-radius:${radius};padding:${pad};cursor:${off ? 'default' : 'pointer'};width:${v.width}px;height:${v.height}px;flex-shrink:0;transition:all 0.2s;overflow:hidden;box-sizing:border-box;display:flex;flex-direction:column;position:relative;opacity:${st.opacity};filter:${st.filter};box-shadow:${st.shadow};"
+         onmouseover="if(!'${status}'.includes('offline')){this.style.borderColor='#10B981';this.style.boxShadow='0 4px 24px rgba(16,185,129,0.10)';this.style.opacity='1';this.style.filter='none'}"
+         onmouseout="this.style.borderColor='${st.border}';this.style.boxShadow='${st.shadow}';this.style.opacity='${st.opacity}';this.style.filter='${st.filter}'"
          onclick="if(!window._wasDragged)window.location.hash='/server/${server.id}'">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${v.nameMb};">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${nameMb};">
         <div style="overflow:hidden;flex:1;">
-          <div style="font-size:${v.projSize};font-weight:700;color:${projColor};text-transform:uppercase;letter-spacing:0.5px;">${server.project || ''}</div>
-          <div style="font-size:${v.nameSize};font-weight:700;font-family:var(--font-brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#E8ECF1;margin-top:2px;">${server.name}</div>
+          <div style="font-size:${projFs};font-weight:700;color:${st.proj};text-transform:uppercase;letter-spacing:0.8px;">${server.project || ''}</div>
+          <div style="font-size:${nameFs};font-weight:700;font-family:'Space Grotesk',var(--font-brand),sans-serif;letter-spacing:-0.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#E8ECF1;margin-top:2px;">${server.name}</div>
         </div>
-        <div style="width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px;background:${ledColor};${status !== 'offline' ? 'animation:pulse 2s infinite;' : ''}"></div>
+        <div style="width:${Math.max(7, Math.round(9 * s))}px;height:${Math.max(7, Math.round(9 * s))}px;border-radius:50%;flex-shrink:0;margin-top:4px;background:${st.led};${status !== 'offline' ? 'animation:pulse 2s infinite;' : ''}"></div>
       </div>
       <div style="flex:1;display:flex;flex-direction:column;justify-content:center;">
         ${metricRow('CPU', cpu, 'cpu', server.id + '_cpu')}
-        ${metricRow('MEM', mem, 'memory', server.id + '_mem')}
-        ${metricRow('DISK', disk, 'disk', null)}
+        ${metricRow('MEM', mem, 'memory', server.id + '_memory')}
+        ${metricRow('DISK', disk, 'disk', server.id + '_disk')}
       </div>
       ${offlineLabel}
     </div>`;
@@ -603,48 +592,59 @@ function drawAllSparklines(container) {
     const data = sparklineHistory[key];
     if (!data || data.length < 2) return;
 
-    // canvas를 실제 표시 크기에 맞춤 (고해상도 대응)
     const rect = canvas.getBoundingClientRect();
-    if (rect.width === 0) return;
-    canvas.width = rect.width * 2;
-    canvas.height = rect.height * 2;
+    if (rect.width === 0 || rect.height === 0) return;
 
+    // 고해상도 대응 (2x)
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
     const ctx = canvas.getContext('2d');
-    ctx.scale(2, 2);
+    ctx.scale(dpr, dpr);
+
     const w = rect.width;
     const h = rect.height;
-    const pad = 2;
+    const padX = 2, padY = 3;
 
     ctx.clearRect(0, 0, w, h);
 
     const max = Math.max(...data, 100);
     const min = Math.min(...data, 0);
     const range = max - min || 1;
-    const step = (w - pad * 2) / (data.length - 1);
+    const step = (w - padX * 2) / (data.length - 1);
 
     // 색상: 마지막 값 기준
     const last = data[data.length - 1];
-    const color = last >= 90 ? '#FF5C5C' : last >= 70 ? '#F5A623' : '#69F6B8';
+    const color = last >= 90 ? '#EF4444' : last >= 70 ? '#F59E0B' : '#10B981';
 
-    // 선 그리기
+    // 점 좌표 계산
+    const points = data.map((v, i) => ({
+      x: padX + i * step,
+      y: h - padY - ((v - min) / range) * (h - padY * 2)
+    }));
+
+    // Bezier 곡선으로 부드러운 선 그리기
     ctx.beginPath();
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
-    data.forEach((v, i) => {
-      const x = pad + i * step;
-      const y = h - pad - ((v - min) / range) * (h - pad * 2);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
+
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const cpx = (prev.x + curr.x) / 2;
+      ctx.quadraticCurveTo(prev.x + (cpx - prev.x) * 0.8, prev.y, cpx, (prev.y + curr.y) / 2);
+      ctx.quadraticCurveTo(curr.x - (curr.x - cpx) * 0.8, curr.y, curr.x, curr.y);
+    }
     ctx.stroke();
 
-    // 영역 채우기 (반투명)
-    ctx.lineTo(pad + (data.length - 1) * step, h);
-    ctx.lineTo(pad, h);
+    // 영역 채우기 (fill-opacity 0.1)
+    ctx.lineTo(points[points.length - 1].x, h);
+    ctx.lineTo(points[0].x, h);
     ctx.closePath();
-    ctx.globalAlpha = 0.12;
+    ctx.globalAlpha = 0.10;
     ctx.fillStyle = color;
     ctx.fill();
     ctx.globalAlpha = 1;
