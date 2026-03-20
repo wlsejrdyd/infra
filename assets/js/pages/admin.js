@@ -230,11 +230,53 @@ WantedBy=multi-user.target
 EOF
 systemctl daemon-reload && systemctl enable sim-mon-agent && systemctl start sim-mon-agent</code>
     </div>
+
+    <!-- Loki 로그 연동 -->
+    <div style="background:#151a24;border:1px solid #1E2736;border-radius:3px;padding:1rem;margin-top:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+        <span style="font-size:0.75rem;font-weight:600;color:#A9ABB3;text-transform:uppercase;">Loki 로그 연동 (LOGS 탭)</span>
+      </div>
+      <div style="font-size:0.78rem;color:#6B7A90;margin-bottom:0.75rem;">K8s 클러스터의 Loki + Promtail에서 수집한 로그를 LOGS 탭에서 조회합니다.</div>
+
+      <div style="font-size:0.72rem;font-weight:600;color:#A9ABB3;margin-bottom:0.3rem;">1. Loki Gateway NodePort 생성</div>
+      <code id="lokiNpCmd" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki-gateway-np
+  namespace: monitoring
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/instance: loki
+    app.kubernetes.io/name: loki
+  ports:
+    - port: 80
+      targetPort: 8080
+      nodePort: 31100
+EOF</code>
+
+      <div style="font-size:0.72rem;font-weight:600;color:#A9ABB3;margin-bottom:0.3rem;">2. Promtail tenant ID 확인</div>
+      <code style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">kubectl get secret -n monitoring promtail -o jsonpath='{.data.promtail\\.yaml}' | base64 -d | grep tenant_id</code>
+
+      <div style="font-size:0.72rem;font-weight:600;color:#A9ABB3;margin-bottom:0.3rem;">3. infra 서버 api/.env 설정</div>
+      <code id="lokiEnvCmd" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">LOKI_URL=http://K8S_NODE_IP:31100
+LOKI_ORG_ID=1</code>
+
+      <div style="font-size:0.72rem;font-weight:600;color:#A9ABB3;margin-bottom:0.3rem;">4. 연결 테스트</div>
+      <code style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">curl -s -H "X-Scope-OrgID: 1" "http://K8S_NODE_IP:31100/loki/api/v1/label/namespace/values"
+# {"status":"success","data":["database","default","monitoring",...]} 이 나오면 성공</code>
+
+      <div style="font-size:0.72rem;color:#6B7A90;margin-top:0.5rem;">설정 후 Flask 재시작 → LOGS 탭에서 실시간 로그 조회 가능</div>
+      <button class="btn" id="copyLokiNpBtn" style="font-size:0.7rem;margin-top:0.5rem;">NodePort 명령 복사</button>
+    </div>
   `;
 
   document.getElementById('copyInstallBtn')?.addEventListener('click', () => copyCmd('installCmd'));
   document.getElementById('copyK8sInstallBtn')?.addEventListener('click', () => copyCmd('k8sInstallCmd'));
   document.getElementById('copyPushCmdBtn')?.addEventListener('click', () => copyCmd('pushSystemdCmd'));
+  document.getElementById('copyLokiNpBtn')?.addEventListener('click', () => copyCmd('lokiNpCmd'));
 }
 
 function copyCmd(elementId) {
