@@ -198,37 +198,53 @@ EOF</code>
 
     <!-- Push Agent -->
     <div style="background:#151a24;border:1px solid #1E2736;border-radius:3px;padding:1rem;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-        <span style="font-size:0.75rem;font-weight:600;color:#A9ABB3;text-transform:uppercase;">Push Agent 설치 (방화벽 차단 환경)</span>
-        <button class="btn" id="copyPushCmdBtn" style="font-size:0.7rem;">복사</button>
-      </div>
-      <div style="font-size:0.78rem;color:#6B7A90;margin-bottom:0.75rem;">Node Exporter 포트(9100)에 접근 불가한 서버에서 사용</div>
-      <div style="font-size:0.72rem;font-weight:600;color:#A9ABB3;margin-bottom:0.3rem;">1. 파일 복사</div>
-      <code id="pushAgentSetup" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">mkdir -p ~/sim_mon_agent
-scp agent/push_agent.py agent/agent_config.json user@TARGET_SERVER:~/sim_mon_agent/</code>
-      <div style="font-size:0.72rem;font-weight:600;color:#A9ABB3;margin-bottom:0.3rem;">2. agent_config.json</div>
-      <code style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">{
+      <div style="font-size:0.75rem;font-weight:600;color:#A9ABB3;text-transform:uppercase;margin-bottom:0.5rem;">Push Agent 설치 (방화벽 차단 환경)</div>
+      <div style="font-size:0.78rem;color:#6B7A90;margin-bottom:0.75rem;">Node Exporter 포트(9100)에 접근 불가한 서버에서 사용. 대상 서버에 SSH 접속 후 아래 명령어를 순서대로 실행.</div>
+
+      <div style="font-size:0.72rem;font-weight:600;color:#10B981;margin-bottom:0.3rem;">Step 1. 에이전트 다운로드 + 설정 생성 (원커맨드)</div>
+      <code id="pushStep1" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">mkdir -p ~/sim_mon_agent && cd ~/sim_mon_agent && curl -sO https://raw.githubusercontent.com/wlsejrdyd/infra/main/agent/push_agent.py && cat > agent_config.json << 'CONF'
+{
   "server_url": "https://infra.deok.kr/api/push/metrics",
-  "server_id": "서버ID",
-  "api_key": "Admin에서 생성된 Push API Key",
+  "server_id": "여기에_서버ID_입력",
+  "api_key": "여기에_API_KEY_입력",
   "interval": 30
-}</code>
-      <div style="font-size:0.72rem;font-weight:600;color:#A9ABB3;margin-bottom:0.3rem;">3. systemd 등록</div>
-      <code id="pushSystemdCmd" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;white-space:pre-wrap;font-family:monospace;">cat > /etc/systemd/system/sim-mon-agent.service << 'EOF'
+}
+CONF
+echo "=== 설정 확인 ===" && cat agent_config.json</code>
+      <button class="btn" id="copyPushStep1" style="font-size:0.7rem;margin-bottom:0.75rem;">Step 1 복사</button>
+
+      <div style="font-size:0.72rem;font-weight:600;color:#10B981;margin-bottom:0.3rem;">Step 2. systemd 서비스 등록 + 시작</div>
+      <code id="pushStep2" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">sudo cat > /etc/systemd/system/sim-mon-agent.service << 'EOF'
 [Unit]
 Description=SIM Monitoring Agent
 After=network.target
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/root/sim_mon_agent
-ExecStart=/usr/bin/python3 /root/sim_mon_agent/push_agent.py
+User=nubison
+WorkingDirectory=/home/nubison/sim_mon_agent
+ExecStart=/usr/bin/python3 /home/nubison/sim_mon_agent/push_agent.py
 Restart=always
 RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl daemon-reload && systemctl enable sim-mon-agent && systemctl start sim-mon-agent</code>
+sudo systemctl daemon-reload && sudo systemctl enable sim-mon-agent && sudo systemctl start sim-mon-agent && sudo systemctl status sim-mon-agent</code>
+      <button class="btn" id="copyPushStep2" style="font-size:0.7rem;margin-bottom:0.75rem;">Step 2 복사</button>
+
+      <div style="font-size:0.72rem;font-weight:600;color:#10B981;margin-bottom:0.3rem;">Step 3. 동작 확인</div>
+      <code id="pushStep3" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;"># 로그 확인
+journalctl -u sim-mon-agent -f --no-pager -n 20
+
+# 에이전트 재시작 (설정 변경 후)
+sudo systemctl restart sim-mon-agent
+
+# 에이전트 중지
+sudo systemctl stop sim-mon-agent</code>
+      <button class="btn" id="copyPushStep3" style="font-size:0.7rem;">Step 3 복사</button>
+
+      <div style="margin-top:0.75rem;padding:0.5rem;background:#0B0E14;border-radius:3px;font-size:0.7rem;color:#6B7A90;">
+        <strong style="color:#F59E0B;">참고:</strong> server_id와 api_key는 Settings → 서버 관리 → Push 모드로 서버 등록 시 자동 생성됩니다.
+      </div>
     </div>
 
     <!-- Loki 로그 연동 -->
@@ -275,7 +291,9 @@ LOKI_ORG_ID=1</code>
 
   document.getElementById('copyInstallBtn')?.addEventListener('click', () => copyCmd('installCmd'));
   document.getElementById('copyK8sInstallBtn')?.addEventListener('click', () => copyCmd('k8sInstallCmd'));
-  document.getElementById('copyPushCmdBtn')?.addEventListener('click', () => copyCmd('pushSystemdCmd'));
+  document.getElementById('copyPushStep1')?.addEventListener('click', () => copyCmd('pushStep1'));
+  document.getElementById('copyPushStep2')?.addEventListener('click', () => copyCmd('pushStep2'));
+  document.getElementById('copyPushStep3')?.addEventListener('click', () => copyCmd('pushStep3'));
   document.getElementById('copyLokiNpBtn')?.addEventListener('click', () => copyCmd('lokiNpCmd'));
 }
 
