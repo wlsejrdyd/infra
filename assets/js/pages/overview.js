@@ -95,12 +95,12 @@ function showToast(emoji, serverName, label) {
 function clamp(min, val, max) { return Math.min(max, Math.max(min, val)); }
 
 function calcCardStyle(rows, availH) {
-  const MAX_H = 175;
-  const MIN_H = 130;
+  const MAX_H = 195;
+  const MIN_H = 160;
   const rawH = Math.floor((availH - (rows - 1) * GAP) / rows);
   const h = clamp(MIN_H, rawH, MAX_H);
-  const w = Math.floor(h * 2.2);
-  const s = h / 140;
+  const w = Math.floor(h * 1.9);
+  const s = h / 160;
   const usedH = rows * h;
   const extraGap = rows > 1 ? Math.min(Math.floor((availH - usedH) / (rows - 1)), 30) : 0;
   const dynGap = GAP + extraGap;
@@ -487,22 +487,23 @@ function renderNodeCard(server) {
   const cpu = m.cpu, mem = m.memory, disk = m.disk;
 
   // ── 스케일 ──
-  const barH = Math.max(4, Math.round(5 * s));
-  const lblFs = `${clamp(0.55, 0.65 * s, 0.78).toFixed(2)}rem`;
-  const valFs = `${clamp(0.55, 0.68 * s, 0.82).toFixed(2)}rem`;
-  const lblW = `${Math.max(26, Math.round(36 * s))}px`;
+  const barH = Math.max(5, Math.round(6 * s));
+  const lblFs = `${clamp(0.58, 0.68 * s, 0.8).toFixed(2)}rem`;
+  const valFs = `${clamp(0.58, 0.72 * s, 0.85).toFixed(2)}rem`;
+  const lblW = `${Math.max(28, Math.round(36 * s))}px`;
   const valW = `${Math.max(30, Math.round(38 * s))}px`;
-  const rowGap = `${Math.max(3, Math.round(6 * s))}px`;
-  const pad = `${Math.max(8, Math.round(14 * s))}px`;
-  const nameFs = `${clamp(0.75, 1.0 * s, 1.25).toFixed(2)}rem`;
-  const projFs = `${clamp(0.48, 0.56 * s, 0.68).toFixed(2)}rem`;
-  const ledSize = `${Math.max(7, Math.round(9 * s))}px`;
+  const rowGap = `${Math.max(6, Math.round(10 * s))}px`;
+  const pad = `${Math.max(10, Math.round(14 * s))}px`;
+  const nameFs = `${clamp(0.8, 1.05 * s, 1.2).toFixed(2)}rem`;
+  const projFs = `${clamp(0.5, 0.58 * s, 0.68).toFixed(2)}rem`;
+  const ledSize = `${Math.max(8, Math.round(10 * s))}px`;
 
   /**
-   * 한 줄: [라벨] [===progress bar===] [~spark~] [값%]
+   * 줄1: CPU          ~~~spark~~~  17%
+   * 줄2: [=========progress bar=========]
    */
-  const sparkW = Math.max(45, Math.round(55 * s));
-  const sparkH = Math.max(16, Math.round(20 * s));
+  const sparkW = Math.max(50, Math.round(60 * s));
+  const sparkH = Math.max(14, Math.round(16 * s));
 
   const metricRow = (label, val, type, histKey) => {
     const barColor = gc(val, type);
@@ -511,7 +512,6 @@ function renderNodeCard(server) {
     const hist = sparklineHistory[histKey];
     const hasHist = hist && hist.length >= 2;
 
-    // 값 색상: 기본 흰색, 경고/위험일 때만 색상
     const th = (server.thresholds || serversData.defaultThresholds)[type];
     let valColor = '#E8ECF1';
     if (off) valColor = '#4B5563';
@@ -521,13 +521,16 @@ function renderNodeCard(server) {
     }
 
     return `
-      <div style="display:flex;align-items:center;gap:${Math.max(4, Math.round(6 * s))}px;margin-top:${rowGap};">
-        <span style="font-size:${lblFs};font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#A9ABB3;min-width:${lblW};flex-shrink:0;">${label}</span>
-        <div style="flex:1;height:${barH}px;background:#1C2028;border-radius:2px;overflow:hidden;">
+      <div style="margin-top:${rowGap};">
+        <div style="display:flex;align-items:flex-end;margin-bottom:3px;">
+          <span style="font-size:${lblFs};font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#A9ABB3;">${label}</span>
+          <div style="flex:1;"></div>
+          ${hasHist ? `<canvas data-sparkline="${histKey}" style="width:${sparkW}px;height:${sparkH}px;flex-shrink:0;margin-right:6px;"></canvas>` : ''}
+          <span style="font-size:${valFs};font-weight:700;font-family:'Space Grotesk',monospace;color:${valColor};">${display}</span>
+        </div>
+        <div style="height:${barH}px;background:#1C2028;border-radius:2px;overflow:hidden;">
           <div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px;transition:all 0.5s ease;"></div>
         </div>
-        ${hasHist ? `<canvas data-sparkline="${histKey}" style="width:${sparkW}px;height:${sparkH}px;flex-shrink:0;"></canvas>` : ''}
-        <span style="font-size:${valFs};font-weight:700;font-family:'Space Grotesk',monospace;min-width:${valW};text-align:right;flex-shrink:0;color:${valColor};">${display}</span>
       </div>`;
   };
 
