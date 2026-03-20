@@ -417,6 +417,42 @@ function showServerModal(server) {
           </small>
         </div>
 
+        <!-- 서버별 임계치 (개별 설정, 비어있으면 기본값 사용) -->
+        <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:0.75rem;">
+            <input type="checkbox" id="useCustomThresholds" ${server.thresholds ? 'checked' : ''}>
+            <label for="useCustomThresholds" style="font-size:0.8rem;font-weight:600;color:var(--text-muted);cursor:pointer;">서버별 임계치 사용 (체크 해제 시 기본값 적용)</label>
+          </div>
+          <div id="customThresholdsSection" style="display:${server.thresholds ? 'block' : 'none'};">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+              ${['cpu', 'memory', 'disk'].map(type => {
+                const th = server.thresholds || serversData.defaultThresholds;
+                const label = type === 'cpu' ? 'CPU' : type === 'memory' ? 'Memory' : 'Disk';
+                return `<div>
+                  <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:4px;">${label}</div>
+                  <div style="display:flex;gap:4px;">
+                    <input type="number" class="form-input" id="srv_${type}_warn" value="${th[type]?.warning || ''}" placeholder="경고" style="padding:6px 8px;font-size:0.8rem;">
+                    <input type="number" class="form-input" id="srv_${type}_crit" value="${th[type]?.critical || ''}" placeholder="위험" style="padding:6px 8px;font-size:0.8rem;">
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+              ${['cpuRequest', 'memoryRequest'].map(type => {
+                const th = server.thresholds || serversData.defaultThresholds;
+                const label = type === 'cpuRequest' ? 'K8s CPU Req' : 'K8s MEM Req';
+                return `<div>
+                  <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:4px;">${label}</div>
+                  <div style="display:flex;gap:4px;">
+                    <input type="number" class="form-input" id="srv_${type}_warn" value="${(th[type] || {}).warning || ''}" placeholder="경고" style="padding:6px 8px;font-size:0.8rem;">
+                    <input type="number" class="form-input" id="srv_${type}_crit" value="${(th[type] || {}).critical || ''}" placeholder="위험" style="padding:6px 8px;font-size:0.8rem;">
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+
         <div style="display: flex; gap: 8px; margin-top: 1.5rem;">
           <button class="btn" id="modalCancelBtn" style="flex: 1;">취소</button>
           <button class="btn btn-primary" id="modalSaveBtn" style="flex: 1;">
@@ -451,6 +487,11 @@ function showServerModal(server) {
     if (confirm('API Key를 재생성하면 기존 에이전트의 키도 변경해야 합니다. 계속하시겠습니까?')) {
       document.getElementById('pushApiKey').value = _generateApiKey();
     }
+  });
+
+  // 서버별 임계치 토글
+  document.getElementById('useCustomThresholds').addEventListener('change', (e) => {
+    document.getElementById('customThresholdsSection').style.display = e.target.checked ? 'block' : 'none';
   });
 
   // mode 셀렉트 변경 시 라벨/플레이스홀더 + API Key 필드 토글
@@ -490,6 +531,25 @@ async function saveServer() {
   // push 모드일 때만 pushApiKey 저장
   if (mode === 'push') {
     serverData.pushApiKey = document.getElementById('pushApiKey').value.trim();
+  }
+
+  // 서버별 임계치
+  if (document.getElementById('useCustomThresholds').checked) {
+    serverData.thresholds = {};
+    ['cpu', 'memory', 'disk'].forEach(type => {
+      const w = parseInt(document.getElementById(`srv_${type}_warn`).value);
+      const c = parseInt(document.getElementById(`srv_${type}_crit`).value);
+      if (!isNaN(w) && !isNaN(c)) serverData.thresholds[type] = { warning: w, critical: c };
+    });
+    ['cpuRequest', 'memoryRequest'].forEach(type => {
+      const w = parseInt(document.getElementById(`srv_${type}_warn`).value);
+      const c = parseInt(document.getElementById(`srv_${type}_crit`).value);
+      if (!isNaN(w) && !isNaN(c)) serverData.thresholds[type] = { warning: w, critical: c };
+    });
+    // 빈 객체면 제거
+    if (Object.keys(serverData.thresholds).length === 0) delete serverData.thresholds;
+  } else {
+    delete serverData.thresholds;
   }
 
   if (!serverData.id || !serverData.name || !serverData.project || !serverData.instance) {
