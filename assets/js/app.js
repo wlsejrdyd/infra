@@ -123,6 +123,9 @@ function renderTopbar() {
     });
   });
 
+  // 알림 버튼
+  document.getElementById('btnNotification')?.addEventListener('click', toggleAlertDropdown);
+
   // 검색
   const searchInput = document.getElementById('topbarSearch');
   if (searchInput) {
@@ -228,6 +231,90 @@ function cleanup() {
     currentCleanup();
     currentCleanup = null;
   }
+}
+
+/**
+ * 알림 드롭다운 토글
+ */
+async function toggleAlertDropdown() {
+  let dropdown = document.getElementById('alertDropdown');
+  if (dropdown) { dropdown.remove(); return; }
+
+  dropdown = document.createElement('div');
+  dropdown.id = 'alertDropdown';
+  dropdown.style.cssText = 'position:fixed;top:var(--topbar-height);right:60px;width:360px;max-height:420px;background:#1A1F2B;border:1px solid #2A3444;border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,0.5);z-index:600;overflow:hidden;animation:fadeIn 0.15s ease-out;';
+
+  // Slack 설정 + 알림 이력 로드
+  let alertConfig = { enabled: true };
+  let alertState = {};
+  try {
+    [alertConfig, alertState] = await Promise.all([
+      fetch('/api/alert/config').then(r => r.json()).catch(() => ({ enabled: true })),
+      fetch('/api/alert/state').then(r => r.json()).catch(() => ({}))
+    ]);
+  } catch (e) { /* */ }
+
+  const entries = Object.entries(alertState).sort((a, b) => {
+    const tA = a[1].timestamp || '';
+    const tB = b[1].timestamp || '';
+    return tB.localeCompare(tA);
+  });
+
+  dropdown.innerHTML = `
+    <div style="padding:12px 14px;border-bottom:1px solid #1E2736;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:0.8rem;font-weight:700;">Alerts</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:0.7rem;color:#6B7A90;">Slack</span>
+        <button id="slackToggleBtn" style="padding:3px 10px;border-radius:3px;border:1px solid ${alertConfig.enabled ? '#10B981' : '#2A3444'};background:${alertConfig.enabled ? 'rgba(16,185,129,0.15)' : 'transparent'};color:${alertConfig.enabled ? '#10B981' : '#6B7A90'};font-size:0.7rem;font-weight:700;cursor:pointer;">${alertConfig.enabled ? 'ON' : 'OFF'}</button>
+      </div>
+    </div>
+    <div style="max-height:340px;overflow-y:auto;padding:6px;">
+      ${entries.length === 0 ? '<div style="padding:20px;text-align:center;color:#6B7A90;font-size:0.8rem;">알림 이력 없음</div>' :
+        entries.map(([id, info]) => {
+          const isSSL = id.startsWith('ssl:');
+          const statusColor = info.status === 'critical' ? '#EF4444' : info.status === 'warning' ? '#F59E0B' : '#6B7A90';
+          const time = info.timestamp ? new Date(info.timestamp).toLocaleString('ko-KR', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '--';
+          return `<div style="padding:8px 10px;border-bottom:1px solid rgba(30,39,54,0.5);display:flex;align-items:center;gap:10px;">
+            <div style="width:6px;height:6px;border-radius:50%;background:${statusColor};flex-shrink:0;"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:0.78rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${isSSL ? '🔒 ' : ''}${info.serverName || id}</div>
+              <div style="font-size:0.65rem;color:#6B7A90;">${info.status || '--'} · ${time}</div>
+            </div>
+          </div>`;
+        }).join('')
+      }
+    </div>
+  `;
+
+  document.body.appendChild(dropdown);
+
+  // Slack 토글
+  dropdown.querySelector('#slackToggleBtn')?.addEventListener('click', async () => {
+    alertConfig.enabled = !alertConfig.enabled;
+    try {
+      await fetch('/api/alert/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: alertConfig.enabled })
+      });
+    } catch (e) { /* */ }
+    const btn = dropdown.querySelector('#slackToggleBtn');
+    btn.textContent = alertConfig.enabled ? 'ON' : 'OFF';
+    btn.style.borderColor = alertConfig.enabled ? '#10B981' : '#2A3444';
+    btn.style.background = alertConfig.enabled ? 'rgba(16,185,129,0.15)' : 'transparent';
+    btn.style.color = alertConfig.enabled ? '#10B981' : '#6B7A90';
+  });
+
+  // 바깥 클릭 시 닫기
+  setTimeout(() => {
+    const closer = (e) => {
+      if (!dropdown.contains(e.target) && e.target.id !== 'btnNotification') {
+        dropdown.remove();
+        document.removeEventListener('click', closer);
+      }
+    };
+    document.addEventListener('click', closer);
+  }, 10);
 }
 
 // 앱 시작

@@ -150,6 +150,12 @@ def _save_alert_config(config):
         json.dump(config, f, indent=2)
 
 
+@app.route('/api/alert/state', methods=['GET'])
+def get_alert_state():
+    """알림 상태 이력 조회"""
+    return jsonify(_load_alert_state()), 200
+
+
 @app.route('/api/alert/config', methods=['GET'])
 def get_alert_config():
     """알림 설정 조회"""
