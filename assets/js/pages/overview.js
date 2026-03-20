@@ -94,9 +94,11 @@ function showToast(emoji, serverName, label) {
 
 function clamp(min, val, max) { return Math.min(max, Math.max(min, val)); }
 
+const MIN_CARD_H = 210;
+
 function calcCardStyle(rows, availH) {
   const MAX_H = 230;
-  const MIN_H = 210;
+  const MIN_H = MIN_CARD_H;
   const rawH = Math.floor((availH - (rows - 1) * GAP) / rows);
   const h = clamp(MIN_H, rawH, MAX_H);
   const w = Math.floor(h * 1.9);
@@ -392,9 +394,11 @@ function renderServerGrid() {
     const availH = container.clientHeight;
     if (availH <= 0) return;
 
-    cardStyle = calcCardStyle(currentRows, availH);
+    // pinned가 공간 차지하면 scroll 영역이 줄어듦 → 실제 가능한 행 수 계산
+    const effectiveRows = Math.max(1, Math.min(currentRows, Math.floor(availH / (MIN_CARD_H + GAP))));
+    cardStyle = calcCardStyle(effectiveRows, availH);
     const dg = cardStyle.dynGap;
-    const trackH = currentRows * cardStyle.height + (currentRows - 1) * dg;
+    const trackH = effectiveRows * cardStyle.height + (effectiveRows - 1) * dg;
     track.style.height = trackH + 'px';
     track.style.gap = dg + 'px';
 
@@ -427,7 +431,7 @@ function renderServerGrid() {
     // sparkline 그리기
     drawAllSparklines();
 
-    const colCount = Math.ceil(scrolling.length / currentRows);
+    const colCount = Math.ceil(scrolling.length / effectiveRows);
     const contentW = colCount * cardStyle.width + (colCount - 1) * dg;
     const containerW = container.clientWidth;
     const maxScroll = Math.max(0, contentW - containerW);
