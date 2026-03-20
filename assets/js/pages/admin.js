@@ -15,7 +15,7 @@ export async function renderAdmin() {
 
   const main = document.getElementById('app');
   main.innerHTML = `
-    <div class="main">
+    <div class="page-content">
       <!-- Header -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
         <div>

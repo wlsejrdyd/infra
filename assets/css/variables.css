@@ -1,26 +1,32 @@
-/* assets/css/variables.css */
+/* === Obsidian Sentinel Design System === */
 
 :root {
-  /* Background Colors */
-  --bg-primary: #0a0e17;
-  --bg-secondary: #111827;
-  --bg-card: #1f2937;
-  --bg-card-hover: #374151;
-  
-  /* Accent Colors */
-  --accent: #3b82f6;
-  --accent-glow: rgba(59, 130, 246, 0.3);
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  
-  /* Text Colors */
-  --text: #f9fafb;
-  --text-muted: #9ca3af;
-  
+  /* Background */
+  --bg-primary: #0B0E14;
+  --bg-secondary: #121720;
+  --bg-card: #1A1F2B;
+  --bg-card-hover: #222838;
+  --bg-topbar: #10141C;
+
+  /* Accent (Mint Green) */
+  --accent: #69F6B8;
+  --accent-dim: rgba(105, 246, 184, 0.15);
+  --accent-glow: rgba(105, 246, 184, 0.25);
+
+  /* Status */
+  --success: #69F6B8;
+  --warning: #F5A623;
+  --danger: #FF5C5C;
+
+  /* Text */
+  --text: #E8ECF1;
+  --text-muted: #6B7A90;
+  --text-dim: #3D4A5C;
+
   /* Border */
-  --border: #374151;
-  
+  --border: #1E2736;
+  --border-light: #2A3444;
+
   /* Service Colors */
   --prometheus: #e6522c;
   --grafana: #f46800;
@@ -28,43 +34,69 @@
   --salm: #ec4899;
   --mgmt: #8b5cf6;
   --backup: #06b6d4;
+
+  /* Sizing */
+  --topbar-height: 52px;
+  --statusbar-height: 36px;
+
+  /* Font */
+  --font-ui: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+  --font-brand: 'Space Grotesk', 'Inter', sans-serif;
 }
 
-/* Base Styles */
-* {
+/* === Base Reset === */
+*, *::before, *::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
 body {
-  font-family: 'Segoe UI', -apple-system, sans-serif;
+  font-family: var(--font-ui);
   background: var(--bg-primary);
   color: var(--text);
   min-height: 100vh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar */
+/* === Scrollbar === */
 ::-webkit-scrollbar {
   width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--border-light);
   border-radius: 3px;
 }
 
-/* Animations */
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+
+/* === Animations === */
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50% { opacity: 0.4; }
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 4px var(--accent-glow); }
+  50% { box-shadow: 0 0 12px var(--accent-glow); }
 }

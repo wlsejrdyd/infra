@@ -28,7 +28,7 @@ export async function renderDetail(params) {
   
   if (!server) {
     document.getElementById('app').innerHTML = `
-      <div class="main">
+      <div class="page-content">
         <div class="card">
           <h2>서버를 찾을 수 없습니다.</h2>
           <button class="btn" onclick="window.location.hash = '/overview'">돌아가기</button>
@@ -40,7 +40,7 @@ export async function renderDetail(params) {
 
   const main = document.getElementById('app');
   main.innerHTML = `
-    <div class="main">
+    <div class="page-content">
       <!-- 상단: 서버 상태(7) + Network/Disk I/O(3) -->
       <div style="display: grid; grid-template-columns: 7fr 3fr; gap: 1rem; margin-bottom: 1.5rem;">
         <!-- 서버 상태 카드 -->
@@ -642,8 +642,8 @@ async function createCharts(instance) {
       datasets: [{
         label: 'CPU %',
         data: cpuHistory.map(d => d.value),
-        borderColor: 'rgba(59, 130, 246, 1)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        borderColor: 'rgba(105, 246, 184, 1)',
+        backgroundColor: 'rgba(105, 246, 184, 0.1)',
         tension: 0.4,
         fill: true
       }]
