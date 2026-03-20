@@ -682,6 +682,80 @@ def loki_label_values(label_name):
         return jsonify({'error': str(e)}), 500
 
 
+# ──────────────────────────────────
+# 자동 배포 Webhook
+# ──────────────────────────────────
+
+DEPLOY_SECRET = os.environ.get('DEPLOY_SECRET', '')
+DEPLOY_DIR = os.environ.get('DEPLOY_DIR', '/app/infra')
+INFRA_SERVICE = os.environ.get('INFRA_SERVICE', 'infra-api')
+
+@app.route('/api/deploy', methods=['POST'])
+def deploy_webhook():
+    """GitHub Webhook → git pull + 서비스 재시작"""
+    import subprocess, hmac, hashlib
+
+    # Secret 검증 (설정된 경우)
+    if DEPLOY_SECRET:
+        sig = request.headers.get('X-Hub-Signature-256', '')
+        body = request.get_data()
+        expected = 'sha256=' + hmac.new(DEPLOY_SECRET.encode(), body, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            return jsonify({'error': 'Invalid signature'}), 403
+
+    try:
+        # git pull
+        pull = subprocess.run(
+            ['git', 'pull', 'origin', 'main'],
+            cwd=DEPLOY_DIR,
+            capture_output=True, text=True, timeout=30
+        )
+
+        if pull.returncode != 0:
+            return jsonify({'error': 'git pull failed', 'stderr': pull.stderr}), 500
+
+        # 변경 사항 있으면 서비스 재시작
+        need_restart = 'server.py' in pull.stdout or 'Already up to date' not in pull.stdout
+        restart_result = ''
+
+        if need_restart:
+            restart = subprocess.run(
+                ['systemctl', 'restart', INFRA_SERVICE],
+                capture_output=True, text=True, timeout=30
+            )
+            restart_result = f'restart: {restart.returncode}'
+
+        app.logger.info(f'[Deploy] pull: {pull.stdout.strip()} | {restart_result}')
+
+        return jsonify({
+            'success': True,
+            'pull': pull.stdout.strip(),
+            'restarted': need_restart,
+            'restart_result': restart_result
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/deploy/status', methods=['GET'])
+def deploy_status():
+    """현재 배포 상태 확인"""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ['git', 'log', '--oneline', '-5'],
+            cwd=DEPLOY_DIR,
+            capture_output=True, text=True, timeout=10
+        )
+        return jsonify({
+            'commits': result.stdout.strip().split('\n'),
+            'service': INFRA_SERVICE
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     # 개발 환경: 디버그 모드
     # 운영 환경: gunicorn 사용 권장
