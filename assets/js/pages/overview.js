@@ -95,8 +95,8 @@ function showToast(emoji, serverName, label) {
 function clamp(min, val, max) { return Math.min(max, Math.max(min, val)); }
 
 function calcCardStyle(rows, availH) {
-  const MAX_H = 200;
-  const MIN_H = 175;
+  const MAX_H = 210;
+  const MIN_H = 190;
   const rawH = Math.floor((availH - (rows - 1) * GAP) / rows);
   const h = clamp(MIN_H, rawH, MAX_H);
   const w = Math.floor(h * 1.9);
