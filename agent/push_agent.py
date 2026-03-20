@@ -319,6 +319,53 @@ def read_k8s_resources(node_name_override=None):
     }
 
 
+# ── NIC 속도 / 디스크 타입 ──
+
+def read_nic_speed():
+    """NIC별 최대 속도 (bytes/s). /sys/class/net/*/speed (Mbps → bytes/s)"""
+    result = {}
+    try:
+        for iface in os.listdir('/sys/class/net'):
+            if any(iface.startswith(p) for p in _VIRT_IFACE):
+                continue
+            speed_file = '/sys/class/net/{}/speed'.format(iface)
+            try:
+                with open(speed_file, 'r') as f:
+                    mbps = int(f.read().strip())
+                if mbps > 0:
+                    result[iface] = mbps * 1000000 // 8  # Mbps → bytes/s
+            except (IOError, OSError, ValueError):
+                continue
+    except (IOError, OSError):
+        pass
+    return result
+
+
+def read_disk_max_throughput():
+    """블록 디바이스 최대 처리량 추정 (rotational → HDD/SSD 판별)"""
+    total_max = 0
+    try:
+        for device in os.listdir('/sys/block'):
+            if not _BLOCKDEV_RE.match(device):
+                continue
+            rot_file = '/sys/block/{}/queue/rotational'.format(device)
+            try:
+                with open(rot_file, 'r') as f:
+                    is_hdd = int(f.read().strip()) == 1
+                # HDD ~150MB/s, SSD ~550MB/s, NVMe ~3500MB/s
+                if 'nvme' in device:
+                    total_max += 3500 * 1024 * 1024
+                elif is_hdd:
+                    total_max += 150 * 1024 * 1024
+                else:
+                    total_max += 550 * 1024 * 1024
+            except (IOError, OSError, ValueError):
+                continue
+    except (IOError, OSError):
+        pass
+    return total_max if total_max > 0 else 550 * 1024 * 1024  # 기본 SSD
+
+
 # ── 메트릭 통합 수집 ──
 
 def collect_metrics():
@@ -389,8 +436,8 @@ def collect_metrics():
         'diskUsed': disk_used,
         'uptime': uptime,
         'loadAverage': load_avg,
-        'network': {'inbound': rx, 'outbound': tx},
-        'diskIO': {'read': dr, 'write': dw},
+        'network': {'inbound': rx, 'outbound': tx, 'nicMaxBps': sum(read_nic_speed().values()) or None},
+        'diskIO': {'read': dr, 'write': dw, 'diskMaxBps': read_disk_max_throughput()},
         'filesystems': filesystems,
         'processes': processes,
     }

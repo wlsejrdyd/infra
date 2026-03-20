@@ -89,12 +89,20 @@ export async function renderDetail(params) {
       </div>
       <div style="display:flex;flex-direction:column;gap:0.5rem;">
         <div style="background:#151a24;border:1px solid #1E2736;border-radius:3px;padding:0.6rem 0.8rem;">
-          <div style="font-size:0.65rem;font-weight:600;color:#6B7A90;margin-bottom:0.4rem;text-transform:uppercase;">Network Traffic</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
+            <span style="font-size:0.65rem;font-weight:600;color:#6B7A90;text-transform:uppercase;">Network Traffic</span>
+            <span id="networkPct" style="font-size:0.65rem;font-weight:700;color:#10B981;"></span>
+          </div>
+          <div id="networkBar" style="height:4px;background:#1C2028;border-radius:2px;margin-bottom:0.4rem;display:none;"><div id="networkBarFill" style="height:100%;border-radius:2px;transition:width 0.5s;"></div></div>
           <div style="display:flex;justify-content:space-between;margin-bottom:0.2rem;"><span style="color:#6B7A90;font-size:0.75rem;">↓ In</span><span id="networkIn" style="font-size:0.85rem;font-weight:600;">-- B/s</span></div>
           <div style="display:flex;justify-content:space-between;"><span style="color:#6B7A90;font-size:0.75rem;">↑ Out</span><span id="networkOut" style="font-size:0.85rem;font-weight:600;">-- B/s</span></div>
         </div>
         <div style="background:#151a24;border:1px solid #1E2736;border-radius:3px;padding:0.6rem 0.8rem;">
-          <div style="font-size:0.65rem;font-weight:600;color:#6B7A90;margin-bottom:0.4rem;text-transform:uppercase;">Disk I/O</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
+            <span style="font-size:0.65rem;font-weight:600;color:#6B7A90;text-transform:uppercase;">Disk I/O</span>
+            <span id="diskIOPct" style="font-size:0.65rem;font-weight:700;color:#10B981;"></span>
+          </div>
+          <div id="diskIOBar" style="height:4px;background:#1C2028;border-radius:2px;margin-bottom:0.4rem;display:none;"><div id="diskIOBarFill" style="height:100%;border-radius:2px;transition:width 0.5s;"></div></div>
           <div style="display:flex;justify-content:space-between;margin-bottom:0.2rem;"><span style="color:#6B7A90;font-size:0.75rem;">Read</span><span id="diskRead" style="font-size:0.85rem;font-weight:600;">-- B/s</span></div>
           <div style="display:flex;justify-content:space-between;"><span style="color:#6B7A90;font-size:0.75rem;">Write</span><span id="diskWrite" style="font-size:0.85rem;font-weight:600;">-- B/s</span></div>
         </div>
@@ -213,8 +221,32 @@ async function updateServerData(server) {
   if (metrics.uptime) document.getElementById('uptimeValue').textContent = `${metrics.uptime.days}d ${metrics.uptime.hours}h`;
   if (networkTraffic.inbound !== null) document.getElementById('networkIn').textContent = formatBytes(networkTraffic.inbound) + '/s';
   if (networkTraffic.outbound !== null) document.getElementById('networkOut').textContent = formatBytes(networkTraffic.outbound) + '/s';
+  // 네트워크 사용률 %
+  if (networkTraffic.nicMaxBps && networkTraffic.nicMaxBps > 0) {
+    const totalNet = (networkTraffic.inbound || 0) + (networkTraffic.outbound || 0);
+    const netPct = Math.min(100, totalNet / networkTraffic.nicMaxBps * 100);
+    const netColor = netPct >= 80 ? '#EF4444' : netPct >= 50 ? '#F59E0B' : '#10B981';
+    const pctEl = document.getElementById('networkPct');
+    if (pctEl) { pctEl.textContent = `${netPct.toFixed(1)}% of ${formatBytes(networkTraffic.nicMaxBps)}/s`; pctEl.style.color = netColor; }
+    const barEl = document.getElementById('networkBar');
+    const fillEl = document.getElementById('networkBarFill');
+    if (barEl) barEl.style.display = '';
+    if (fillEl) { fillEl.style.width = `${netPct}%`; fillEl.style.background = netColor; }
+  }
   if (diskIO.read !== null) document.getElementById('diskRead').textContent = formatBytes(diskIO.read) + '/s';
   if (diskIO.write !== null) document.getElementById('diskWrite').textContent = formatBytes(diskIO.write) + '/s';
+  // 디스크 I/O 사용률 %
+  if (diskIO.diskMaxBps && diskIO.diskMaxBps > 0) {
+    const totalDiskIO = (diskIO.read || 0) + (diskIO.write || 0);
+    const dioPct = Math.min(100, totalDiskIO / diskIO.diskMaxBps * 100);
+    const dioColor = dioPct >= 80 ? '#EF4444' : dioPct >= 50 ? '#F59E0B' : '#10B981';
+    const pctEl = document.getElementById('diskIOPct');
+    if (pctEl) { pctEl.textContent = `${dioPct.toFixed(1)}%`; pctEl.style.color = dioColor; }
+    const barEl = document.getElementById('diskIOBar');
+    const fillEl = document.getElementById('diskIOBarFill');
+    if (barEl) barEl.style.display = '';
+    if (fillEl) { fillEl.style.width = `${dioPct}%`; fillEl.style.background = dioColor; }
+  }
   if (loadAvg.load1 !== null) document.getElementById('load1').textContent = loadAvg.load1.toFixed(2);
   if (loadAvg.load5 !== null) document.getElementById('load5').textContent = loadAvg.load5.toFixed(2);
   if (loadAvg.load15 !== null) document.getElementById('load15').textContent = loadAvg.load15.toFixed(2);

@@ -414,6 +414,16 @@ export async function fetchNetworkTraffic(instance) {
     console.error('Failed to fetch network traffic:', e);
   }
   
+  // NIC 최대 속도 (bytes/s)
+  try {
+    const speedQuery = `node_network_speed_bytes{instance="${instance}",device!~"lo|docker.*|veth.*"}`;
+    const speedRes = await fetch(`${CONFIG.prometheusUrl}/api/v1/query?query=${encodeURIComponent(speedQuery)}`);
+    const speedData = await speedRes.json();
+    if (speedData.status === 'success' && speedData.data.result.length > 0) {
+      traffic.nicMaxBps = speedData.data.result.reduce((sum, r) => sum + parseFloat(r.value[1]), 0);
+    }
+  } catch (e) { /* node_network_speed_bytes 없으면 무시 */ }
+
   return traffic;
 }
 
@@ -448,7 +458,10 @@ export async function fetchDiskIO(instance) {
   } catch (e) {
     console.error('Failed to fetch disk I/O:', e);
   }
-  
+
+  // 디스크 최대 처리량 추정 (Node Exporter에서는 타입 판별 불가, 기본 SSD 550MB/s)
+  diskIO.diskMaxBps = 550 * 1024 * 1024;
+
   return diskIO;
 }
 
