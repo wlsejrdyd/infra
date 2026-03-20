@@ -95,12 +95,12 @@ function showToast(emoji, serverName, label) {
 function clamp(min, val, max) { return Math.min(max, Math.max(min, val)); }
 
 function calcCardStyle(rows, availH) {
-  const MAX_H = 210;
-  const MIN_H = 80;
+  const MAX_H = 180;
+  const MIN_H = 70;
   const rawH = Math.floor((availH - (rows - 1) * GAP) / rows);
   const h = clamp(MIN_H, rawH, MAX_H);
-  const w = Math.floor(h * 1.45);
-  const s = h / 140; // 기준 높이 140px
+  const w = Math.floor(h * 2.1);
+  const s = h / 120;
   const usedH = rows * h;
   const extraGap = rows > 1 ? Math.min(Math.floor((availH - usedH) / (rows - 1)), 30) : 0;
   const dynGap = GAP + extraGap;
@@ -462,7 +462,7 @@ function renderNodeCard(server) {
   const m = server._metrics || {};
   const status = server._status || 'offline';
   const off = status === 'offline';
-  const s = v.height / 140;
+  const s = v.height / 120;
 
   // ── 상태별 스타일 ──
   const SS = {
@@ -472,11 +472,9 @@ function renderNodeCard(server) {
     offline:  { border: '#1E2736', bg: '#13161E', shadow: 'none', proj: '#4B5563', led: '#4B5563', opacity: '0.5', filter: 'grayscale(1)' },
   };
   const st = SS[status] || SS.offline;
+  const critAnim = status === 'critical' ? 'animation:glow 2s ease-in-out infinite;' : '';
 
-  // critical: 맥동 glow 클래스
-  const criticalAnim = status === 'critical' ? 'animation:glow 2s ease-in-out infinite;' : '';
-
-  // ── 색상 헬퍼 ──
+  // ── 색상 ──
   const gc = (val, type) => {
     if (val == null) return '#4B5563';
     const th = (server.thresholds || serversData.defaultThresholds)[type];
@@ -488,57 +486,58 @@ function renderNodeCard(server) {
 
   const cpu = m.cpu, mem = m.memory, disk = m.disk;
 
-  // ── 스케일 값 ──
-  const barH = Math.max(5, Math.round(6 * s));
-  const sparkH = Math.max(20, Math.round(28 * s));
-  const lblFs = `${clamp(0.6, 0.72 * s, 0.82).toFixed(2)}rem`;
-  const valFs = `${clamp(0.6, 0.78 * s, 0.9).toFixed(2)}rem`;
-  const rowMt = `${Math.max(6, Math.round(12 * s))}px`;
-  const pad = `${Math.max(10, Math.round(18 * s))}px`;
-  const nameFs = `${clamp(0.8, 1.1 * s, 1.35).toFixed(2)}rem`;
-  const projFs = `${clamp(0.5, 0.6 * s, 0.72).toFixed(2)}rem`;
-  const ledSize = `${Math.max(8, Math.round(10 * s))}px`;
+  // ── 스케일 ──
+  const barH = Math.max(4, Math.round(5 * s));
+  const lblFs = `${clamp(0.55, 0.65 * s, 0.78).toFixed(2)}rem`;
+  const valFs = `${clamp(0.55, 0.68 * s, 0.82).toFixed(2)}rem`;
+  const lblW = `${Math.max(26, Math.round(36 * s))}px`;
+  const valW = `${Math.max(30, Math.round(38 * s))}px`;
+  const rowGap = `${Math.max(3, Math.round(6 * s))}px`;
+  const pad = `${Math.max(8, Math.round(14 * s))}px`;
+  const nameFs = `${clamp(0.75, 1.0 * s, 1.25).toFixed(2)}rem`;
+  const projFs = `${clamp(0.48, 0.56 * s, 0.68).toFixed(2)}rem`;
+  const ledSize = `${Math.max(7, Math.round(9 * s))}px`;
 
   /**
-   * 메트릭 블록: 라벨+값 한 줄 → 아래에 프로그레스바+sparkline
+   * 시안 구조: 한 줄에 [라벨] [===바+sparkline===] [값%]
    */
-  const metricBlock = (label, val, type, histKey) => {
+  const metricRow = (label, val, type, histKey) => {
     const color = gc(val, type);
     const pct = off ? 0 : (val || 0);
     const display = off || val == null ? '-- %' : `${val.toFixed(0)}%`;
     const hist = sparklineHistory[histKey];
     const hasHist = hist && hist.length >= 2;
-    const valColor = off ? '#4B5563' : (val != null && val >= ((server.thresholds || serversData.defaultThresholds)[type]?.critical || 90)) ? '#EF4444' : color;
+    const sparkCanvas = hasHist
+      ? `<canvas data-sparkline="${histKey}" style="position:absolute;bottom:${barH}px;right:0;width:35%;height:${Math.max(16, Math.round(22 * s))}px;pointer-events:none;"></canvas>`
+      : '';
 
     return `
-      <div style="margin-top:${rowMt};">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${Math.max(3, Math.round(4 * s))}px;">
-          <span style="font-size:${lblFs};font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#A9ABB3;">${label}</span>
-          <span style="font-size:${valFs};font-weight:700;font-family:'Space Grotesk',monospace;color:${valColor};">${display}</span>
-        </div>
-        <div style="position:relative;height:${barH}px;">
-          <div style="position:absolute;top:0;left:0;right:0;height:100%;background:#1C2028;border-radius:2px;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:${Math.max(4, Math.round(6 * s))}px;margin-top:${rowGap};">
+        <span style="font-size:${lblFs};font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#A9ABB3;min-width:${lblW};flex-shrink:0;">${label}</span>
+        <div style="flex:1;position:relative;height:${barH}px;">
+          <div style="height:100%;background:#1C2028;border-radius:2px;overflow:hidden;">
             <div style="height:100%;width:${pct}%;background:${color};border-radius:2px;transition:all 0.5s ease;"></div>
           </div>
-          ${hasHist ? `<canvas data-sparkline="${histKey}" style="position:absolute;bottom:0;right:0;width:40%;height:${sparkH}px;pointer-events:none;"></canvas>` : ''}
+          ${sparkCanvas}
         </div>
+        <span style="font-size:${valFs};font-weight:700;font-family:'Space Grotesk',monospace;min-width:${valW};text-align:right;flex-shrink:0;color:${off ? '#4B5563' : color};">${display}</span>
       </div>`;
   };
 
-  // ── Offline 전용: 중앙 아이콘 ──
+  // ── Offline 오버레이 ──
   const offlineOverlay = off ? `
-    <div style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1;">
-      <div style="font-size:${Math.max(24, Math.round(36 * s))}px;opacity:0.3;margin-bottom:6px;">&#9888;</div>
-      <div style="font-size:${projFs};font-weight:700;color:#4B5563;letter-spacing:1.5px;text-transform:uppercase;">NODE OFFLINE</div>
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;z-index:1;">
+      <div style="font-size:${Math.max(20, Math.round(28 * s))}px;opacity:0.3;margin-bottom:4px;">&#9888;</div>
+      <div style="font-size:${projFs};font-weight:700;color:#4B5563;letter-spacing:1.5px;">NODE OFFLINE</div>
     </div>` : '';
 
   return `
-    <div style="background:${st.bg};border:1px solid ${st.border};border-radius:${Math.max(4, Math.round(6 * s))}px;padding:${pad};cursor:${off ? 'default' : 'pointer'};width:${v.width}px;height:${v.height}px;flex-shrink:0;transition:all 0.25s;overflow:hidden;box-sizing:border-box;display:flex;flex-direction:column;position:relative;opacity:${st.opacity};filter:${st.filter};box-shadow:${st.shadow};${criticalAnim}"
+    <div style="background:${st.bg};border:1px solid ${st.border};border-radius:${Math.max(4, Math.round(6 * s))}px;padding:${pad};cursor:${off ? 'default' : 'pointer'};width:${v.width}px;height:${v.height}px;flex-shrink:0;transition:all 0.25s;overflow:hidden;box-sizing:border-box;display:flex;flex-direction:column;position:relative;opacity:${st.opacity};filter:${st.filter};box-shadow:${st.shadow};${critAnim}"
          onmouseover="if('${status}'!=='offline'){this.style.borderColor='#10B981';this.style.boxShadow='0 4px 24px rgba(16,185,129,0.10)';this.style.opacity='1';this.style.filter='none'}"
          onmouseout="this.style.borderColor='${st.border}';this.style.boxShadow='${st.shadow}';this.style.opacity='${st.opacity}';this.style.filter='${st.filter}'"
          onclick="if(!window._wasDragged)window.location.hash='/server/${server.id}'">
       ${offlineOverlay}
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;${off ? 'opacity:0.3;' : ''}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${Math.max(4, Math.round(8 * s))}px;${off ? 'opacity:0.3;' : ''}">
         <div style="overflow:hidden;flex:1;">
           <div style="font-size:${projFs};font-weight:700;color:${st.proj};text-transform:uppercase;letter-spacing:0.8px;">${server.project || ''}</div>
           <div style="font-size:${nameFs};font-weight:700;font-family:'Space Grotesk',var(--font-brand),sans-serif;letter-spacing:-0.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#E8ECF1;margin-top:2px;">${server.name}</div>
@@ -546,9 +545,9 @@ function renderNodeCard(server) {
         <div style="width:${ledSize};height:${ledSize};border-radius:50%;flex-shrink:0;margin-top:4px;background:${st.led};${status !== 'offline' ? 'animation:pulse 2s infinite;' : ''}"></div>
       </div>
       <div style="flex:1;display:flex;flex-direction:column;justify-content:center;${off ? 'opacity:0.15;' : ''}">
-        ${metricBlock('CPU', cpu, 'cpu', server.id + '_cpu')}
-        ${metricBlock('MEM', mem, 'memory', server.id + '_memory')}
-        ${metricBlock('DISK', disk, 'disk', server.id + '_disk')}
+        ${metricRow('CPU', cpu, 'cpu', server.id + '_cpu')}
+        ${metricRow('MEM', mem, 'memory', server.id + '_memory')}
+        ${metricRow('DISK', disk, 'disk', server.id + '_disk')}
       </div>
     </div>`;
 }
