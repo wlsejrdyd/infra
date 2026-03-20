@@ -149,13 +149,13 @@ function renderDomainsTab(container) {
 
 function renderGuideTab(container) {
   container.innerHTML = `
-    <!-- Node Exporter -->
+    <!-- Pull 모드: Node Exporter -->
     <div style="background:#151a24;border:1px solid #1E2736;border-radius:3px;padding:1rem;margin-bottom:1rem;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-        <span style="font-size:0.75rem;font-weight:600;color:#A9ABB3;text-transform:uppercase;">Node Exporter 설치 (서버 모니터링)</span>
-        <button class="btn" id="copyInstallBtn" style="font-size:0.7rem;">복사</button>
-      </div>
-      <code id="installCmd" style="display:block;padding:10px;background:#0B0E14;border-radius:3px;font-family:monospace;font-size:0.75rem;overflow-x:auto;white-space:nowrap;margin-bottom:0.5rem;">curl -sSL https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz | tar xz && mv node_exporter-1.7.0.linux-amd64/node_exporter /usr/local/bin/ && useradd -rs /bin/false node_exporter && tee /etc/systemd/system/node_exporter.service > /dev/null &lt;&lt; 'SERVICE'
+      <div style="font-size:0.75rem;font-weight:600;color:#A9ABB3;text-transform:uppercase;margin-bottom:0.5rem;">Pull 모드: Node Exporter 설치</div>
+      <div style="font-size:0.78rem;color:#6B7A90;margin-bottom:0.75rem;">Prometheus가 직접 메트릭을 수집하는 방식. 대상 서버에서 9100 포트 접근이 가능해야 합니다.</div>
+
+      <div style="font-size:0.72rem;font-weight:600;color:#10B981;margin-bottom:0.3rem;">Step 1. Node Exporter 설치 + systemd 등록 (원커맨드)</div>
+      <code id="installCmd" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">curl -sSL https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz | tar xz && sudo mv node_exporter-1.7.0.linux-amd64/node_exporter /usr/local/bin/ && rm -rf node_exporter-1.7.0.linux-amd64 && sudo useradd -rs /bin/false node_exporter 2>/dev/null; sudo tee /etc/systemd/system/node_exporter.service > /dev/null << 'EOF'
 [Unit]
 Description=Node Exporter
 After=network.target
@@ -166,20 +166,30 @@ Type=simple
 ExecStart=/usr/local/bin/node_exporter
 [Install]
 WantedBy=multi-user.target
-SERVICE
-systemctl daemon-reload && systemctl enable node_exporter && systemctl start node_exporter</code>
-      <div style="padding:0.5rem;background:#0B0E14;border-radius:3px;font-size:0.72rem;font-family:monospace;color:#A9ABB3;">
-        Prometheus: - job_name: 'node' > static_configs > targets: ['<span style="color:#F59E0B;">IP</span>:9100']
+EOF
+sudo systemctl daemon-reload && sudo systemctl enable node_exporter && sudo systemctl start node_exporter && sudo systemctl status node_exporter</code>
+      <button class="btn" id="copyInstallBtn" style="font-size:0.7rem;margin-bottom:0.5rem;">복사</button>
+
+      <div style="font-size:0.72rem;font-weight:600;color:#10B981;margin-bottom:0.3rem;">Step 2. Settings에서 서버 등록</div>
+      <div style="padding:0.5rem;background:#0B0E14;border-radius:3px;font-size:0.72rem;color:#6B7A90;">
+        Settings → 서버 관리 → <strong style="color:#10B981;">+ 서버 추가</strong> → 모니터링 방식: <strong>Pull</strong> → 인스턴스: <strong style="color:#F59E0B;">서버IP:9100</strong><br>
+        저장하면 <strong style="color:#10B981;">prometheus.yml에 자동 등록</strong>되고 Prometheus가 핫리로드됩니다.
       </div>
     </div>
 
-    <!-- Kube-State-Metrics -->
+    <!-- Pull 모드: Kube-State-Metrics -->
     <div style="background:#151a24;border:1px solid #1E2736;border-radius:3px;padding:1rem;margin-bottom:1rem;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-        <span style="font-size:0.75rem;font-weight:600;color:#A9ABB3;text-transform:uppercase;">Kube-State-Metrics 설치 (K8s 모니터링)</span>
-        <button class="btn" id="copyK8sInstallBtn" style="font-size:0.7rem;">복사</button>
-      </div>
-      <code id="k8sInstallCmd" style="display:block;padding:10px;background:#0B0E14;border-radius:3px;font-family:monospace;font-size:0.75rem;overflow-x:auto;white-space:nowrap;">kubectl apply -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/cluster-role-binding.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/cluster-role.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/deployment.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/service.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/service-account.yaml && kubectl apply -f - &lt;&lt;EOF
+      <div style="font-size:0.75rem;font-weight:600;color:#A9ABB3;text-transform:uppercase;margin-bottom:0.5rem;">Pull 모드: Kube-State-Metrics 설치 (K8s 클러스터)</div>
+      <div style="font-size:0.78rem;color:#6B7A90;margin-bottom:0.75rem;">K8s Pod 리소스(CPU/MEM Request) 모니터링. 클러스터 마스터 노드에서 실행.</div>
+
+      <div style="font-size:0.72rem;font-weight:600;color:#10B981;margin-bottom:0.3rem;">설치 + NodePort 생성</div>
+      <code id="k8sInstallCmd" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">kubectl apply -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/cluster-role-binding.yaml \\
+  -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/cluster-role.yaml \\
+  -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/deployment.yaml \\
+  -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/service.yaml \\
+  -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/service-account.yaml
+
+kubectl apply -f - <<'EOF'
 apiVersion: v1
 kind: Service
 metadata:
@@ -193,7 +203,10 @@ spec:
     - port: 8080
       targetPort: http-metrics
       nodePort: 30047
-EOF</code>
+EOF
+
+echo "확인: curl -s http://localhost:30047/metrics | head -5"</code>
+      <button class="btn" id="copyK8sInstallBtn" style="font-size:0.7rem;">복사</button>
     </div>
 
     <!-- Push Agent -->
