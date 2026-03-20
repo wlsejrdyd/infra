@@ -95,8 +95,8 @@ function showToast(emoji, serverName, label) {
 function clamp(min, val, max) { return Math.min(max, Math.max(min, val)); }
 
 function calcCardStyle(rows, availH) {
-  const MAX_H = 195;
-  const MIN_H = 160;
+  const MAX_H = 200;
+  const MIN_H = 175;
   const rawH = Math.floor((availH - (rows - 1) * GAP) / rows);
   const h = clamp(MIN_H, rawH, MAX_H);
   const w = Math.floor(h * 1.9);
@@ -547,7 +547,7 @@ function renderNodeCard(server) {
          onmouseout="this.style.borderColor='${st.border}';this.style.boxShadow='${st.shadow}';this.style.opacity='${st.opacity}';this.style.filter='${st.filter}'"
          onclick="if(!window._wasDragged)window.location.hash='/server/${server.id}'">
       ${offlineOverlay}
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${Math.max(4, Math.round(8 * s))}px;${off ? 'opacity:0.3;' : ''}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${Math.max(2, Math.round(4 * s))}px;${off ? 'opacity:0.3;' : ''}">
         <div style="overflow:hidden;flex:1;">
           <div style="font-size:${projFs};font-weight:700;color:${st.proj};text-transform:uppercase;letter-spacing:0.8px;">${server.project || ''}</div>
           <div style="font-size:${nameFs};font-weight:700;font-family:'Space Grotesk',var(--font-brand),sans-serif;letter-spacing:-0.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#E8ECF1;margin-top:2px;">${server.name}</div>
