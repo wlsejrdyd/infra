@@ -4,6 +4,7 @@ import { renderOverview, cleanupOverview, setOverviewStatusFilter } from '/asset
 import { renderDetail, cleanupDetail } from '/assets/js/pages/detail.js';
 import { renderAdmin, cleanupAdmin } from '/assets/js/pages/admin.js';
 import { renderLogs, cleanupLogs } from '/assets/js/pages/logs.js';
+import { renderIncidents, cleanupIncidents } from '/assets/js/pages/incidents.js';
 
 let currentCleanup = null;
 
@@ -43,6 +44,13 @@ function initApp() {
     currentCleanup = cleanupAdmin;
   });
 
+  router.addRoute('/incidents', async (params) => {
+    cleanup();
+    setActiveTab('incidents');
+    await renderIncidents(params);
+    currentCleanup = cleanupIncidents;
+  });
+
   router.addRoute('/logs', async (params) => {
     cleanup();
     setActiveTab('logs');
@@ -72,8 +80,7 @@ function renderTopbar() {
 
     <div class="topbar-tabs">
       <button class="topbar-tab active" data-tab="nodes" onclick="window.location.hash='/overview'">Nodes</button>
-      <button class="topbar-tab" data-tab="clusters" onclick="window.location.hash='/overview'" title="Coming soon">Clusters</button>
-      <button class="topbar-tab" data-tab="incidents" onclick="window.location.hash='/overview'" title="Coming soon">Incidents</button>
+      <button class="topbar-tab" data-tab="incidents" onclick="window.location.hash='/incidents'">Incidents</button>
       <button class="topbar-tab" data-tab="logs" onclick="window.location.hash='/logs'">Logs</button>
     </div>
 

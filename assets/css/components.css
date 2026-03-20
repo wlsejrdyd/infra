@@ -275,6 +275,24 @@
   color: var(--text);
 }
 
+/* === Incident Filter Buttons === */
+.incident-filter-btn {
+  padding: 5px 14px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #6B7A90;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.incident-filter-btn:hover { color: #E8ECF1; }
+.incident-filter-btn.active { background: #10B981; color: #0B0E14; }
+
 /* === Form Elements === */
 .form-group {
   margin-bottom: 1rem;
