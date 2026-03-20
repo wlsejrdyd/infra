@@ -11,8 +11,7 @@ export async function renderIncidents() {
     <div class="page-content" style="max-width:1400px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.5rem;">
         <div>
-          <div style="font-size:0.65rem;font-weight:700;color:#10B981;text-transform:uppercase;letter-spacing:1px;">SENTINEL MONITORING</div>
-          <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.4rem;font-weight:700;margin-top:4px;">System Incidents Log</h2>
+          <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.4rem;font-weight:700;">System Incidents Log</h2>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
           <div style="display:flex;border:1px solid #2A3444;border-radius:3px;overflow:hidden;">
@@ -66,6 +65,12 @@ export async function renderIncidents() {
       renderList();
     });
   });
+
+  // LOGS 버튼 → 해당 서버 이름으로 로그 검색
+  window.__goToServerLogs = (serverName) => {
+    window._pendingLogSearch = serverName;
+    window.location.hash = '/logs';
+  };
 
   await loadIncidents();
   refreshInterval = setInterval(loadIncidents, 15000);
@@ -161,8 +166,8 @@ function renderList() {
         <div style="width:160px;flex-shrink:0;font-size:0.75rem;color:#6B7A90;">${time}</div>
         <div style="width:100px;flex-shrink:0;text-align:right;">
           ${inc.resolved
-            ? '<button class="btn" style="font-size:0.68rem;padding:3px 10px;" onclick="window.location.hash=\'/logs\'">HISTORY</button>'
-            : `<button class="btn" style="font-size:0.68rem;padding:3px 10px;margin-right:4px;" onclick="window.location.hash='/logs'">LOGS</button><button class="btn btn-primary" style="font-size:0.68rem;padding:3px 10px;" onclick="window.location.hash='/server/${inc.id}'">VIEW</button>`
+            ? `<button class="btn" style="font-size:0.68rem;padding:3px 10px;" onclick="window.__goToServerLogs('${inc.serverName}')">HISTORY</button>`
+            : `<button class="btn" style="font-size:0.68rem;padding:3px 10px;margin-right:4px;" onclick="window.__goToServerLogs('${inc.serverName}')">LOGS</button><button class="btn btn-primary" style="font-size:0.68rem;padding:3px 10px;" onclick="window.location.hash='/server/${inc.id}'">VIEW</button>`
           }
         </div>
       </div>`;

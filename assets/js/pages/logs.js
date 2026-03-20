@@ -154,6 +154,13 @@ export async function renderLogs() {
   document.getElementById('exportLogsBtn').addEventListener('click', exportLogs);
 
   // 초기 로드 + 라벨 로드
+  // incidents에서 넘어온 검색어 적용
+  if (window._pendingLogSearch) {
+    regexFilter = window._pendingLogSearch;
+    document.getElementById('logRegex').value = regexFilter;
+    delete window._pendingLogSearch;
+  }
+
   await loadNamespaces();
   await fetchLogs();
   refreshInterval = setInterval(fetchLogs, 10000);
