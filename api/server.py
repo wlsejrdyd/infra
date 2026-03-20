@@ -56,6 +56,99 @@ LOKI_URL = os.environ.get('LOKI_URL', 'http://localhost:3100')
 LOKI_ORG_ID = os.environ.get('LOKI_ORG_ID', 'fake')
 LOKI_HEADERS = lambda: {'X-Scope-OrgID': LOKI_ORG_ID}
 
+# Prometheus 설정
+PROMETHEUS_YML = os.environ.get('PROMETHEUS_YML', '/etc/prometheus/prometheus.yml')
+PROMETHEUS_RELOAD_URL = os.environ.get('PROMETHEUS_RELOAD_URL', 'http://localhost:9090/-/reload')
+
+
+def _sync_prometheus_targets():
+    """servers.json의 pull 모드 서버를 prometheus.yml에 동기화"""
+    try:
+        import yaml
+    except ImportError:
+        app.logger.warning('[Prometheus] PyYAML not installed, skipping sync')
+        return False
+
+    if not os.path.exists(PROMETHEUS_YML):
+        app.logger.warning(f'[Prometheus] {PROMETHEUS_YML} not found, skipping sync')
+        return False
+
+    try:
+        # servers.json에서 pull 모드 서버 목록 추출
+        with open(SERVERS_FILE, 'r', encoding='utf-8') as f:
+            servers_data = json.load(f)
+
+        pull_servers = [s for s in servers_data.get('servers', []) if s.get('mode', 'pull') == 'pull']
+
+        # instance별로 node exporter / kube-state-metrics 분리
+        node_targets = []
+        kube_targets = []
+        for s in pull_servers:
+            inst = s.get('instance', '')
+            if not inst or inst.startswith(('localhost', '127.0.0.1')):
+                continue  # localhost는 수동 관리
+            if ':' in inst:
+                node_targets.append(inst)
+                # kube-state-metrics: 같은 IP에 30047 포트 (있으면)
+                ip = inst.split(':')[0]
+                kube_target = f'{ip}:30047'
+                if kube_target not in kube_targets:
+                    kube_targets.append(kube_target)
+
+        # prometheus.yml 로드
+        with open(PROMETHEUS_YML, 'r') as f:
+            prom_config = yaml.safe_load(f)
+
+        if not prom_config or 'scrape_configs' not in prom_config:
+            return False
+
+        changed = False
+        for job in prom_config['scrape_configs']:
+            job_name = job.get('job_name', '')
+
+            if job_name == 'node':
+                existing = job.get('static_configs', [{}])[0].get('targets', [])
+                # localhost 유지 + 외부 서버 동기화
+                local = [t for t in existing if t.startswith(('localhost', '127.0.0.1'))]
+                new_targets = sorted(set(local + node_targets))
+                if sorted(existing) != new_targets:
+                    job['static_configs'] = [{'targets': new_targets}]
+                    changed = True
+
+            elif job_name == 'kube-state-metrics':
+                existing = job.get('static_configs', [{}])[0].get('targets', [])
+                local = [t for t in existing if t.startswith(('localhost', '127.0.0.1'))]
+                new_targets = sorted(set(local + kube_targets))
+                if sorted(existing) != new_targets:
+                    job['static_configs'] = [{'targets': new_targets}]
+                    changed = True
+
+        if changed:
+            # 백업 후 저장
+            import shutil
+            backup = PROMETHEUS_YML + '.bak'
+            shutil.copy2(PROMETHEUS_YML, backup)
+
+            with open(PROMETHEUS_YML, 'w') as f:
+                yaml.dump(prom_config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+            # Prometheus 핫리로드
+            try:
+                resp = http_requests.post(PROMETHEUS_RELOAD_URL, timeout=5)
+                app.logger.info(f'[Prometheus] reload: {resp.status_code}')
+            except Exception as e:
+                app.logger.warning(f'[Prometheus] reload failed: {e}')
+
+            app.logger.info(f'[Prometheus] targets synced: node={len(node_targets)}, kube={len(kube_targets)}')
+            return True
+
+        return False
+
+    except Exception as e:
+        app.logger.error(f'[Prometheus] sync error: {e}')
+        return False
+
+
 @app.route('/api/servers', methods=['GET'])
 def get_servers():
     """서버 목록 조회"""
@@ -79,8 +172,15 @@ def save_servers():
         # 파일 저장
         with open(SERVERS_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-        
-        return jsonify({'success': True, 'message': 'Servers saved successfully'}), 200
+
+        # Prometheus targets 동기화
+        prom_synced = _sync_prometheus_targets()
+
+        return jsonify({
+            'success': True,
+            'message': 'Servers saved successfully',
+            'prometheus_synced': prom_synced
+        }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
