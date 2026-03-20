@@ -10,32 +10,152 @@ let editingSslDomain = null;
 // 디버깅용 전역 노출
 window._debugServersData = () => serversData;
 
+let currentAdminTab = 'servers';
+
 export async function renderAdmin() {
   [serversData, sslData] = await Promise.all([fetchServersData(), fetchSslDomains()]);
 
   const main = document.getElementById('app');
   main.innerHTML = `
-    <div class="page-content">
-      <!-- Header -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <div>
-          <button class="btn" onclick="window.location.hash = '/overview'">
-            ← 돌아가기
-          </button>
-        </div>
-        <h1 style="font-size: 1.8rem;">서버 관리</h1>
-        <button class="btn btn-primary" id="addServerBtn">
-          ➕ 서버 추가
-        </button>
+    <div class="page-content" style="max-width:1400px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+        <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.4rem;font-weight:700;">Settings</h2>
+        <button class="btn" onclick="window.location.hash='/overview'" style="font-size:0.78rem;">← 돌아가기</button>
       </div>
 
-      <!-- Node Exporter Install Command -->
-      <div class="card" style="margin-bottom: 1.5rem; background: var(--bg-secondary);">
-        <div class="card-header">
-          <span class="card-title">📦 Node Exporter 설치 (서버 모니터링)</span>
-        </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <code id="installCmd" style="flex: 1; padding: 12px; background: var(--bg-primary); border-radius: 8px; font-family: monospace; font-size: 0.85rem; overflow-x: auto; white-space: nowrap;">curl -sSL https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz | tar xz && mv node_exporter-1.7.0.linux-amd64/node_exporter /usr/local/bin/ && useradd -rs /bin/false node_exporter && tee /etc/systemd/system/node_exporter.service > /dev/null &lt;&lt; 'SERVICE'
+      <!-- 탭 -->
+      <div style="display:flex;gap:2px;border-bottom:1px solid #1E2736;margin-bottom:1.25rem;">
+        <button class="admin-tab active" data-tab="servers">서버 관리</button>
+        <button class="admin-tab" data-tab="domains">SSL 도메인</button>
+        <button class="admin-tab" data-tab="guide">설치 매뉴얼</button>
+      </div>
+
+      <!-- 탭 콘텐츠 -->
+      <div id="adminTabContent"></div>
+
+      <div id="serverModal" style="display:none;"></div>
+      <div id="sslModal" style="display:none;"></div>
+    </div>
+  `;
+
+  // 탭 전환
+  document.querySelectorAll('.admin-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentAdminTab = btn.dataset.tab;
+      renderAdminTab();
+    });
+  });
+
+  renderAdminTab();
+}
+
+function renderAdminTab() {
+  const container = document.getElementById('adminTabContent');
+  if (!container) return;
+
+  if (currentAdminTab === 'servers') renderServersTab(container);
+  else if (currentAdminTab === 'domains') renderDomainsTab(container);
+  else if (currentAdminTab === 'guide') renderGuideTab(container);
+}
+
+function renderServersTab(container) {
+  container.innerHTML = `
+    <!-- 전역 임계치 -->
+    <div style="background:#151a24;border:1px solid #1E2736;border-radius:3px;padding:1rem;margin-bottom:1.25rem;">
+      <div style="font-size:0.7rem;font-weight:600;color:#6B7A90;text-transform:uppercase;letter-spacing:1px;margin-bottom:0.75rem;">전역 임계치 (기본값)</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">
+        ${['cpu', 'memory', 'disk'].map(type => {
+          const label = type === 'cpu' ? 'CPU' : type === 'memory' ? 'Memory' : 'Disk';
+          return `<div>
+            <div style="font-size:0.68rem;color:#A9ABB3;margin-bottom:4px;">${label} (W/C)</div>
+            <div style="display:flex;gap:4px;">
+              <input type="number" class="form-input" id="${type}Warning" value="${serversData.defaultThresholds[type].warning}" style="padding:5px 8px;font-size:0.78rem;">
+              <input type="number" class="form-input" id="${type}Critical" value="${serversData.defaultThresholds[type].critical}" style="padding:5px 8px;font-size:0.78rem;">
+            </div>
+          </div>`;
+        }).join('')}
+        ${['cpuRequest', 'memoryRequest'].map(type => {
+          const label = type === 'cpuRequest' ? 'K8s CPU Req' : 'K8s MEM Req';
+          return `<div>
+            <div style="font-size:0.68rem;color:#A9ABB3;margin-bottom:4px;">${label} (W/C)</div>
+            <div style="display:flex;gap:4px;">
+              <input type="number" class="form-input" id="${type}Warning" value="${(serversData.defaultThresholds[type] || {warning:80}).warning}" style="padding:5px 8px;font-size:0.78rem;">
+              <input type="number" class="form-input" id="${type}Critical" value="${(serversData.defaultThresholds[type] || {critical:90}).critical}" style="padding:5px 8px;font-size:0.78rem;">
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      <button class="btn btn-primary" id="saveThresholdsBtn" style="margin-top:0.75rem;font-size:0.75rem;">임계치 저장</button>
+    </div>
+
+    <!-- 서버 목록 -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+      <span style="font-size:0.8rem;font-weight:600;color:#A9ABB3;">서버 목록 (${serversData.servers.length}대)</span>
+      <button class="btn btn-primary" id="addServerBtn" style="font-size:0.75rem;">+ 서버 추가</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+          <th>아이콘</th><th>이름</th><th>프로젝트</th><th>인스턴스</th><th>임계치</th><th style="text-align:right;">액션</th>
+        </tr></thead>
+        <tbody id="serverTableBody">${renderServerTable()}</tbody>
+      </table>
+    </div>
+  `;
+
+  document.getElementById('addServerBtn').addEventListener('click', showAddServerModal);
+  document.getElementById('saveThresholdsBtn').addEventListener('click', () => saveThresholds());
+  document.getElementById('serverTableBody').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    if (btn.dataset.action === 'edit') showEditServerModal(btn.dataset.serverId);
+    if (btn.dataset.action === 'delete') deleteServer(btn.dataset.serverId);
+  });
+}
+
+function renderDomainsTab(container) {
+  container.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="font-size:0.8rem;font-weight:600;color:#A9ABB3;">SSL 인증서 도메인</span>
+        <span style="font-size:0.7rem;color:#6B7A90;">만료 임계치(일):</span>
+        <input type="number" class="form-input" id="sslWarningDays" value="${sslData.sslThresholds.warning}" style="width:60px;padding:4px 8px;font-size:0.78rem;">
+        <input type="number" class="form-input" id="sslCriticalDays" value="${sslData.sslThresholds.critical}" style="width:60px;padding:4px 8px;font-size:0.78rem;">
+        <button class="btn" id="saveSslThresholdsBtn" style="font-size:0.72rem;">저장</button>
+      </div>
+      <button class="btn btn-primary" id="addSslDomainBtn" style="font-size:0.75rem;">+ 도메인 추가</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+          <th>도메인</th><th>포트</th><th>설명</th><th style="text-align:center;">활성</th><th style="text-align:right;">액션</th>
+        </tr></thead>
+        <tbody id="sslDomainTableBody">${renderSslDomainTable()}</tbody>
+      </table>
+    </div>
+  `;
+
+  document.getElementById('addSslDomainBtn').addEventListener('click', showAddSslDomainModal);
+  document.getElementById('saveSslThresholdsBtn').addEventListener('click', () => saveSslThresholds());
+  document.getElementById('sslDomainTableBody').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    if (btn.dataset.action === 'edit-ssl') showEditSslDomainModal(btn.dataset.sslId);
+    if (btn.dataset.action === 'delete-ssl') deleteSslDomain(btn.dataset.sslId);
+  });
+}
+
+function renderGuideTab(container) {
+  container.innerHTML = `
+    <!-- Node Exporter -->
+    <div style="background:#151a24;border:1px solid #1E2736;border-radius:3px;padding:1rem;margin-bottom:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+        <span style="font-size:0.75rem;font-weight:600;color:#A9ABB3;text-transform:uppercase;">Node Exporter 설치 (서버 모니터링)</span>
+        <button class="btn" id="copyInstallBtn" style="font-size:0.7rem;">복사</button>
+      </div>
+      <code id="installCmd" style="display:block;padding:10px;background:#0B0E14;border-radius:3px;font-family:monospace;font-size:0.75rem;overflow-x:auto;white-space:nowrap;margin-bottom:0.5rem;">curl -sSL https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz | tar xz && mv node_exporter-1.7.0.linux-amd64/node_exporter /usr/local/bin/ && useradd -rs /bin/false node_exporter && tee /etc/systemd/system/node_exporter.service > /dev/null &lt;&lt; 'SERVICE'
 [Unit]
 Description=Node Exporter
 After=network.target
@@ -48,25 +168,18 @@ ExecStart=/usr/local/bin/node_exporter
 WantedBy=multi-user.target
 SERVICE
 systemctl daemon-reload && systemctl enable node_exporter && systemctl start node_exporter</code>
-          <button class="btn btn-primary" id="copyInstallBtn">
-            📋 복사
-          </button>
-        </div>
-        <div style="margin-top: 0.75rem; padding: 0.6rem 0.8rem; background: var(--bg-primary); border-radius: 6px; font-size: 0.8rem;">
-          <div style="color: var(--text-muted); margin-bottom: 0.3rem;">Prometheus 설정 (prometheus.yml)</div>
-          <code style="color: var(--text-primary); font-size: 0.8rem;">- job_name: 'node'</code><br>
-          <code style="color: var(--text-primary); font-size: 0.8rem;">&nbsp;&nbsp;static_configs:</code><br>
-          <code style="color: var(--text-primary); font-size: 0.8rem;">&nbsp;&nbsp;&nbsp;&nbsp;- targets: ['<span style="color: var(--warning);">서버IP</span>:9100']</code>
-        </div>
+      <div style="padding:0.5rem;background:#0B0E14;border-radius:3px;font-size:0.72rem;font-family:monospace;color:#A9ABB3;">
+        Prometheus: - job_name: 'node' > static_configs > targets: ['<span style="color:#F59E0B;">IP</span>:9100']
       </div>
+    </div>
 
-      <!-- Kube-State-Metrics Install Command -->
-      <div class="card" style="margin-bottom: 1.5rem; background: var(--bg-secondary);">
-        <div class="card-header">
-          <span class="card-title">☸️ Kube-State-Metrics 설치 (K8s 모니터링)</span>
-        </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <code id="k8sInstallCmd" style="flex: 1; padding: 12px; background: var(--bg-primary); border-radius: 8px; font-family: monospace; font-size: 0.85rem; overflow-x: auto; white-space: nowrap;">kubectl apply -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/cluster-role-binding.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/cluster-role.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/deployment.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/service.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/service-account.yaml && kubectl apply -f - &lt;&lt;EOF
+    <!-- Kube-State-Metrics -->
+    <div style="background:#151a24;border:1px solid #1E2736;border-radius:3px;padding:1rem;margin-bottom:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+        <span style="font-size:0.75rem;font-weight:600;color:#A9ABB3;text-transform:uppercase;">Kube-State-Metrics 설치 (K8s 모니터링)</span>
+        <button class="btn" id="copyK8sInstallBtn" style="font-size:0.7rem;">복사</button>
+      </div>
+      <code id="k8sInstallCmd" style="display:block;padding:10px;background:#0B0E14;border-radius:3px;font-family:monospace;font-size:0.75rem;overflow-x:auto;white-space:nowrap;">kubectl apply -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/cluster-role-binding.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/cluster-role.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/deployment.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/service.yaml -f https://raw.githubusercontent.com/kubernetes/kube-state-metrics/master/examples/standard/service-account.yaml && kubectl apply -f - &lt;&lt;EOF
 apiVersion: v1
 kind: Service
 metadata:
@@ -81,160 +194,27 @@ spec:
       targetPort: http-metrics
       nodePort: 30047
 EOF</code>
-          <button class="btn btn-primary" id="copyK8sInstallBtn">
-            📋 복사
-          </button>
-        </div>
-        <div style="margin-top: 0.75rem; padding: 0.6rem 0.8rem; background: var(--bg-primary); border-radius: 6px; font-size: 0.8rem;">
-          <div style="color: var(--text-muted); margin-bottom: 0.3rem;">Prometheus 설정 (prometheus.yml)</div>
-          <code style="color: var(--text-primary); font-size: 0.8rem;">- job_name: 'kube-state-metrics'</code><br>
-          <code style="color: var(--text-primary); font-size: 0.8rem;">&nbsp;&nbsp;static_configs:</code><br>
-          <code style="color: var(--text-primary); font-size: 0.8rem;">&nbsp;&nbsp;&nbsp;&nbsp;- targets: ['<span style="color: var(--warning);">서버IP</span>:30047']</code>
-        </div>
-      </div>
+    </div>
 
-      <!-- Thresholds Settings -->
-      <div class="card" style="margin-bottom: 1.5rem;">
-        <div class="card-header">
-          <span class="card-title">⚙️ 임계치 설정</span>
-        </div>
-        <div class="grid-3">
-          <div class="form-group">
-            <label class="form-label">CPU</label>
-            <div style="display: flex; gap: 8px;">
-              <input type="number" class="form-input" id="cpuWarning" 
-                     value="${serversData.defaultThresholds.cpu.warning}" 
-                     placeholder="경고" style="flex: 1;">
-              <input type="number" class="form-input" id="cpuCritical" 
-                     value="${serversData.defaultThresholds.cpu.critical}" 
-                     placeholder="위험" style="flex: 1;">
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Memory</label>
-            <div style="display: flex; gap: 8px;">
-              <input type="number" class="form-input" id="memWarning" 
-                     value="${serversData.defaultThresholds.memory.warning}" 
-                     placeholder="경고" style="flex: 1;">
-              <input type="number" class="form-input" id="memCritical" 
-                     value="${serversData.defaultThresholds.memory.critical}" 
-                     placeholder="위험" style="flex: 1;">
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Disk</label>
-            <div style="display: flex; gap: 8px;">
-              <input type="number" class="form-input" id="diskWarning"
-                     value="${serversData.defaultThresholds.disk.warning}"
-                     placeholder="경고" style="flex: 1;">
-              <input type="number" class="form-input" id="diskCritical"
-                     value="${serversData.defaultThresholds.disk.critical}"
-                     placeholder="위험" style="flex: 1;">
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">K8s CPU Request</label>
-            <div style="display: flex; gap: 8px;">
-              <input type="number" class="form-input" id="cpuRequestWarning"
-                     value="${(serversData.defaultThresholds.cpuRequest || {warning:80}).warning}"
-                     placeholder="경고" style="flex: 1;">
-              <input type="number" class="form-input" id="cpuRequestCritical"
-                     value="${(serversData.defaultThresholds.cpuRequest || {critical:90}).critical}"
-                     placeholder="위험" style="flex: 1;">
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">K8s MEM Request</label>
-            <div style="display: flex; gap: 8px;">
-              <input type="number" class="form-input" id="memRequestWarning"
-                     value="${(serversData.defaultThresholds.memoryRequest || {warning:80}).warning}"
-                     placeholder="경고" style="flex: 1;">
-              <input type="number" class="form-input" id="memRequestCritical"
-                     value="${(serversData.defaultThresholds.memoryRequest || {critical:90}).critical}"
-                     placeholder="위험" style="flex: 1;">
-            </div>
-          </div>
-        </div>
-        <button class="btn btn-primary" id="saveThresholdsBtn" style="margin-top: 1rem;">
-          💾 임계치 저장
-        </button>
+    <!-- Push Agent -->
+    <div style="background:#151a24;border:1px solid #1E2736;border-radius:3px;padding:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+        <span style="font-size:0.75rem;font-weight:600;color:#A9ABB3;text-transform:uppercase;">Push Agent 설치 (방화벽 차단 환경)</span>
+        <button class="btn" id="copyPushCmdBtn" style="font-size:0.7rem;">복사</button>
       </div>
-
-      <!-- Server List -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">📋 서버 목록</span>
-          <span style="font-size: 0.85rem; color: var(--text-muted);">총 ${serversData.servers.length}대</span>
-        </div>
-        <div style="overflow-x: auto;">
-          <table style="width: 100%; border-collapse: collapse;">
-            <thead>
-              <tr style="border-bottom: 1px solid var(--border);">
-                <th style="text-align: left; padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">아이콘</th>
-                <th style="text-align: left; padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">이름</th>
-                <th style="text-align: left; padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">프로젝트</th>
-                <th style="text-align: left; padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">인스턴스</th>
-                <th style="text-align: left; padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">설명</th>
-                <th style="text-align: right; padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">액션</th>
-              </tr>
-            </thead>
-            <tbody id="serverTableBody">
-              ${renderServerTable()}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- SSL 도메인 관리 -->
-      <div class="card" style="margin-top: 1.5rem;">
-        <div class="card-header">
-          <span class="card-title">🔒 SSL 인증서 도메인 관리</span>
-          <button class="btn btn-primary" id="addSslDomainBtn">➕ 도메인 추가</button>
-        </div>
-        <div style="display: flex; gap: 8px; margin-bottom: 1rem; align-items: center;">
-          <label style="font-size: 0.85rem; color: var(--text-muted);">만료 임계치 (일)</label>
-          <input type="number" class="form-input" id="sslWarningDays" value="${sslData.sslThresholds.warning}" style="width: 80px;" placeholder="경고">
-          <input type="number" class="form-input" id="sslCriticalDays" value="${sslData.sslThresholds.critical}" style="width: 80px;" placeholder="위험">
-          <button class="btn" id="saveSslThresholdsBtn">💾 저장</button>
-        </div>
-        <div style="overflow-x: auto;">
-          <table style="width: 100%; border-collapse: collapse;">
-            <thead>
-              <tr style="border-bottom: 1px solid var(--border);">
-                <th style="text-align: left; padding: 10px; font-size: 0.8rem; color: var(--text-muted);">도메인</th>
-                <th style="text-align: left; padding: 10px; font-size: 0.8rem; color: var(--text-muted);">포트</th>
-                <th style="text-align: left; padding: 10px; font-size: 0.8rem; color: var(--text-muted);">설명</th>
-                <th style="text-align: center; padding: 10px; font-size: 0.8rem; color: var(--text-muted);">활성</th>
-                <th style="text-align: right; padding: 10px; font-size: 0.8rem; color: var(--text-muted);">액션</th>
-              </tr>
-            </thead>
-            <tbody id="sslDomainTableBody">
-              ${renderSslDomainTable()}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Push Agent 설치 가이드 -->
-      <div class="card" style="margin-top: 1.5rem; background: var(--bg-secondary);">
-        <div class="card-header">
-          <span class="card-title">📡 Push Agent 설치 (방화벽 차단 환경용)</span>
-        </div>
-        <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
-          Node Exporter 포트(9100)에 접근할 수 없는 서버에서 사용합니다. 에이전트가 메트릭을 수집하여 모니터링 서버로 전송합니다.
-        </div>
-        <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem;">1. 에이전트 파일 복사</div>
-        <code id="pushAgentSetup" style="display:block;padding:10px;background:var(--bg-primary);border-radius:8px;font-size:0.8rem;margin-bottom:0.75rem;white-space:pre-wrap;">mkdir -p ~/sim_mon_agent
+      <div style="font-size:0.78rem;color:#6B7A90;margin-bottom:0.75rem;">Node Exporter 포트(9100)에 접근 불가한 서버에서 사용</div>
+      <div style="font-size:0.72rem;font-weight:600;color:#A9ABB3;margin-bottom:0.3rem;">1. 파일 복사</div>
+      <code id="pushAgentSetup" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">mkdir -p ~/sim_mon_agent
 scp agent/push_agent.py agent/agent_config.json user@TARGET_SERVER:~/sim_mon_agent/</code>
-        <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem;">2. agent_config.json 수정</div>
-        <code style="display:block;padding:10px;background:var(--bg-primary);border-radius:8px;font-size:0.8rem;margin-bottom:0.75rem;white-space:pre-wrap;">{
+      <div style="font-size:0.72rem;font-weight:600;color:#A9ABB3;margin-bottom:0.3rem;">2. agent_config.json</div>
+      <code style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">{
   "server_url": "https://infra.deok.kr/api/push/metrics",
-  "server_id": "서버ID (admin에서 등록한 ID와 일치)",
+  "server_id": "서버ID",
   "api_key": "Admin에서 생성된 Push API Key",
   "interval": 30
 }</code>
-        <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem;">3. systemd 서비스 등록</div>
-        <code id="pushSystemdCmd" style="display:block;padding:10px;background:var(--bg-primary);border-radius:8px;font-size:0.8rem;margin-bottom:0.5rem;white-space:pre-wrap;">cat > /etc/systemd/system/sim-mon-agent.service << 'EOF'
+      <div style="font-size:0.72rem;font-weight:600;color:#A9ABB3;margin-bottom:0.3rem;">3. systemd 등록</div>
+      <code id="pushSystemdCmd" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;white-space:pre-wrap;font-family:monospace;">cat > /etc/systemd/system/sim-mon-agent.service << 'EOF'
 [Unit]
 Description=SIM Monitoring Agent
 After=network.target
@@ -249,40 +229,11 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload && systemctl enable sim-mon-agent && systemctl start sim-mon-agent</code>
-        <button class="btn btn-primary" id="copyPushCmdBtn" style="margin-top:0.5rem;">📋 복사</button>
-      </div>
     </div>
-
-    <div id="serverModal" style="display: none;"></div>
-    <div id="sslModal" style="display: none;"></div>
   `;
 
-  // 이벤트 리스너 등록
-  document.getElementById('addServerBtn').addEventListener('click', showAddServerModal);
-  document.getElementById('copyInstallBtn').addEventListener('click', () => copyCmd('installCmd'));
-  document.getElementById('copyK8sInstallBtn').addEventListener('click', () => copyCmd('k8sInstallCmd'));
-  document.getElementById('saveThresholdsBtn').addEventListener('click', () => saveThresholds());
-
-  // 서버 수정/삭제 — 이벤트 위임 (동적 DOM 재생성에도 동작)
-  document.getElementById('serverTableBody').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-action]');
-    if (!btn) return;
-    if (btn.dataset.action === 'edit') showEditServerModal(btn.dataset.serverId);
-    if (btn.dataset.action === 'delete') deleteServer(btn.dataset.serverId);
-  });
-
-  // SSL 도메인 관리
-  document.getElementById('addSslDomainBtn').addEventListener('click', showAddSslDomainModal);
-  document.getElementById('saveSslThresholdsBtn').addEventListener('click', () => saveSslThresholds());
-  // SSL 수정/삭제 — 이벤트 위임
-  document.getElementById('sslDomainTableBody').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-action]');
-    if (!btn) return;
-    if (btn.dataset.action === 'edit-ssl') showEditSslDomainModal(btn.dataset.sslId);
-    if (btn.dataset.action === 'delete-ssl') deleteSslDomain(btn.dataset.sslId);
-  });
-
-  // Push 가이드 복사
+  document.getElementById('copyInstallBtn')?.addEventListener('click', () => copyCmd('installCmd'));
+  document.getElementById('copyK8sInstallBtn')?.addEventListener('click', () => copyCmd('k8sInstallCmd'));
   document.getElementById('copyPushCmdBtn')?.addEventListener('click', () => copyCmd('pushSystemdCmd'));
 }
 
@@ -300,27 +251,22 @@ function renderServerTable() {
   return serversData.servers.map(server => {
     const mode = server.mode || 'pull';
     const modeBadge = mode === 'push'
-      ? '<span class="badge" style="background:var(--accent);color:#fff;font-size:0.65rem;margin-left:4px;">PUSH</span>'
+      ? '<span style="font-size:0.6rem;font-weight:700;padding:2px 5px;border-radius:2px;background:rgba(16,185,129,0.15);color:#10B981;margin-left:4px;">PUSH</span>'
       : '';
+    const thLabel = server.thresholds ? '<span style="font-size:0.6rem;color:#10B981;">개별</span>' : '<span style="font-size:0.6rem;color:#6B7A90;">기본</span>';
     return `
-    <tr style="border-bottom: 1px solid var(--border);">
-      <td style="padding: 12px; font-size: 1.5rem;">${server.icon}</td>
-      <td style="padding: 12px;">
-        <div style="font-weight: 600;">${server.name}${modeBadge}</div>
-        <div style="font-size: 0.75rem; color: var(--text-muted);">${server.id}</div>
+    <tr>
+      <td style="font-size:1.3rem;">${server.icon}</td>
+      <td>
+        <div style="font-weight:600;font-size:0.82rem;">${server.name}${modeBadge}</div>
+        <div style="font-size:0.68rem;color:#6B7A90;">${server.id}</div>
       </td>
-      <td style="padding: 12px;">
-        <span class="badge info">${server.project}</span>
-      </td>
-      <td style="padding: 12px; font-family: monospace; font-size: 0.85rem;">${server.instance}</td>
-      <td style="padding: 12px; font-size: 0.85rem; color: var(--text-muted);">${server.description}</td>
-      <td style="padding: 12px; text-align: right;">
-        <button class="btn" data-action="edit" data-server-id="${server.id}" style="margin-right: 4px;">
-          ✏️ 수정
-        </button>
-        <button class="btn btn-danger" data-action="delete" data-server-id="${server.id}">
-          🗑️ 삭제
-        </button>
+      <td><span class="badge info">${server.project}</span></td>
+      <td style="font-family:monospace;font-size:0.78rem;">${server.instance}</td>
+      <td>${thLabel}</td>
+      <td style="text-align:right;">
+        <button class="btn" data-action="edit" data-server-id="${server.id}" style="font-size:0.72rem;padding:3px 8px;margin-right:4px;">수정</button>
+        <button class="btn btn-danger" data-action="delete" data-server-id="${server.id}" style="font-size:0.72rem;padding:3px 8px;">삭제</button>
       </td>
     </tr>`;
   }).join('');

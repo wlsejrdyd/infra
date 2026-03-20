@@ -275,6 +275,23 @@
   color: var(--text);
 }
 
+/* === Admin Tab Buttons === */
+.admin-tab {
+  padding: 8px 18px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #6B7A90;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font-ui);
+}
+
+.admin-tab:hover { color: #E8ECF1; }
+.admin-tab.active { color: #10B981; border-bottom-color: #10B981; }
+
 /* === Incident Filter Buttons === */
 .incident-filter-btn {
   padding: 5px 14px;
