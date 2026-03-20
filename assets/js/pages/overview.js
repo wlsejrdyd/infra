@@ -462,18 +462,21 @@ function renderNodeCard(server) {
   const m = server._metrics || {};
   const status = server._status || 'offline';
   const off = status === 'offline';
-  const s = v.height / 100; // 스케일 팩터
+  const s = v.height / 140;
 
-  // ── 상태별 스타일 (명세서 섹션 3) ──
-  const stateStyles = {
+  // ── 상태별 스타일 ──
+  const SS = {
     healthy:  { border: '#1E2736', bg: '#1A1F2B', shadow: 'none', proj: '#10B981', led: '#10B981', opacity: '1', filter: 'none' },
-    warning:  { border: 'rgba(245,158,11,0.45)', bg: 'linear-gradient(160deg, rgba(245,158,11,0.08) 0%, #1A1F2B 55%)', shadow: '0 0 15px rgba(245,158,11,0.06)', proj: '#F59E0B', led: '#F59E0B', opacity: '1', filter: 'none' },
-    critical: { border: 'rgba(239,68,68,0.45)', bg: 'linear-gradient(160deg, rgba(239,68,68,0.10) 0%, #1A1F2B 55%)', shadow: '0 0 20px rgba(239,68,68,0.10)', proj: '#EF4444', led: '#EF4444', opacity: '1', filter: 'none' },
-    offline:  { border: '#1E2736', bg: '#151a24', shadow: 'none', proj: '#4B5563', led: '#4B5563', opacity: '0.5', filter: 'grayscale(0.6)' },
+    warning:  { border: 'rgba(245,158,11,0.4)', bg: 'linear-gradient(160deg, rgba(245,158,11,0.07) 0%, #1A1F2B 50%)', shadow: '0 0 12px rgba(245,158,11,0.05)', proj: '#F59E0B', led: '#F59E0B', opacity: '1', filter: 'none' },
+    critical: { border: 'rgba(239,68,68,0.5)', bg: 'linear-gradient(160deg, rgba(239,68,68,0.09) 0%, #1A1F2B 50%)', shadow: '0 0 20px rgba(239,68,68,0.12)', proj: '#EF4444', led: '#EF4444', opacity: '1', filter: 'none' },
+    offline:  { border: '#1E2736', bg: '#13161E', shadow: 'none', proj: '#4B5563', led: '#4B5563', opacity: '0.5', filter: 'grayscale(1)' },
   };
-  const st = stateStyles[status] || stateStyles.offline;
+  const st = SS[status] || SS.offline;
 
-  // ── 메트릭 색상 ──
+  // critical: 맥동 glow 클래스
+  const criticalAnim = status === 'critical' ? 'animation:glow 2s ease-in-out infinite;' : '';
+
+  // ── 색상 헬퍼 ──
   const gc = (val, type) => {
     if (val == null) return '#4B5563';
     const th = (server.thresholds || serversData.defaultThresholds)[type];
@@ -485,69 +488,68 @@ function renderNodeCard(server) {
 
   const cpu = m.cpu, mem = m.memory, disk = m.disk;
 
-  // ── 메트릭 행 (명세서 섹션 4, 5) ──
-  const barH = Math.max(4, Math.round(6 * s));
-  const lblFs = `${clamp(0.55, 0.68 * s, 0.85).toFixed(2)}rem`;
-  const valFs = `${clamp(0.55, 0.72 * s, 0.95).toFixed(2)}rem`;
-  const lblW = `${Math.max(24, Math.round(34 * s))}px`;
-  const valW = `${Math.max(28, Math.round(38 * s))}px`;
-  const rowGap = `${Math.max(2, Math.round(5 * s))}px`;
+  // ── 스케일 값 ──
+  const barH = Math.max(5, Math.round(6 * s));
+  const sparkH = Math.max(20, Math.round(28 * s));
+  const lblFs = `${clamp(0.6, 0.72 * s, 0.82).toFixed(2)}rem`;
+  const valFs = `${clamp(0.6, 0.78 * s, 0.9).toFixed(2)}rem`;
+  const rowMt = `${Math.max(6, Math.round(12 * s))}px`;
+  const pad = `${Math.max(10, Math.round(18 * s))}px`;
+  const nameFs = `${clamp(0.8, 1.1 * s, 1.35).toFixed(2)}rem`;
+  const projFs = `${clamp(0.5, 0.6 * s, 0.72).toFixed(2)}rem`;
+  const ledSize = `${Math.max(8, Math.round(10 * s))}px`;
 
-  const metricRow = (label, val, type, histKey) => {
+  /**
+   * 메트릭 블록: 라벨+값 한 줄 → 아래에 프로그레스바+sparkline
+   */
+  const metricBlock = (label, val, type, histKey) => {
     const color = gc(val, type);
     const pct = off ? 0 : (val || 0);
     const display = off || val == null ? '-- %' : `${val.toFixed(0)}%`;
     const hist = sparklineHistory[histKey];
     const hasHist = hist && hist.length >= 2;
-
-    // sparkline: 바 영역 우측 40%에만 오버레이, 높이는 바와 동일 레벨
-    const sparkCanvas = hasHist
-      ? `<canvas data-sparkline="${histKey}" style="position:absolute;top:-${barH + 8}px;right:0;width:40%;height:${barH + 12}px;pointer-events:none;"></canvas>`
-      : '';
+    const valColor = off ? '#4B5563' : (val != null && val >= ((server.thresholds || serversData.defaultThresholds)[type]?.critical || 90)) ? '#EF4444' : color;
 
     return `
-      <div style="display:flex;align-items:center;gap:6px;margin-top:${rowGap};">
-        <span style="font-size:${lblFs};font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#A9ABB3;min-width:${lblW};">${label}</span>
-        <div style="flex:1;position:relative;height:${barH}px;">
-          <div style="position:absolute;top:0;left:0;right:0;height:${barH}px;background:#1C2028;border-radius:2px;overflow:hidden;">
+      <div style="margin-top:${rowMt};">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${Math.max(3, Math.round(4 * s))}px;">
+          <span style="font-size:${lblFs};font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:#A9ABB3;">${label}</span>
+          <span style="font-size:${valFs};font-weight:700;font-family:'Space Grotesk',monospace;color:${valColor};">${display}</span>
+        </div>
+        <div style="position:relative;height:${barH}px;">
+          <div style="position:absolute;top:0;left:0;right:0;height:100%;background:#1C2028;border-radius:2px;overflow:hidden;">
             <div style="height:100%;width:${pct}%;background:${color};border-radius:2px;transition:all 0.5s ease;"></div>
           </div>
-          ${sparkCanvas}
+          ${hasHist ? `<canvas data-sparkline="${histKey}" style="position:absolute;bottom:0;right:0;width:40%;height:${sparkH}px;pointer-events:none;"></canvas>` : ''}
         </div>
-        <span style="font-size:${valFs};font-weight:700;font-family:'Space Grotesk',var(--font-brand),monospace;min-width:${valW};text-align:right;color:${off ? '#4B5563' : color};">${display}</span>
       </div>`;
   };
 
-  // ── 카드 사이즈 ──
-  const pad = `${Math.max(8, Math.round(16 * s))}px`;
-  const radius = `${Math.max(4, Math.round(6 * s))}px`;
-  const nameFs = `${clamp(0.7, 1.05 * s, 1.3).toFixed(2)}rem`;
-  const projFs = `${clamp(0.5, 0.62 * s, 0.75).toFixed(2)}rem`;
-  const nameMb = `${Math.max(4, Math.round(8 * s))}px`;
-
-  // ── offline 하단 라벨 ──
-  const offlineLabel = off
-    ? `<div style="text-align:center;font-size:${projFs};color:#4B5563;margin-top:auto;letter-spacing:1px;font-weight:600;">STATUS: OFFLINE</div>`
-    : '';
+  // ── Offline 전용: 중앙 아이콘 ──
+  const offlineOverlay = off ? `
+    <div style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1;">
+      <div style="font-size:${Math.max(24, Math.round(36 * s))}px;opacity:0.3;margin-bottom:6px;">&#9888;</div>
+      <div style="font-size:${projFs};font-weight:700;color:#4B5563;letter-spacing:1.5px;text-transform:uppercase;">NODE OFFLINE</div>
+    </div>` : '';
 
   return `
-    <div style="background:${st.bg};border:1px solid ${st.border};border-radius:${radius};padding:${pad};cursor:${off ? 'default' : 'pointer'};width:${v.width}px;height:${v.height}px;flex-shrink:0;transition:all 0.2s;overflow:hidden;box-sizing:border-box;display:flex;flex-direction:column;position:relative;opacity:${st.opacity};filter:${st.filter};box-shadow:${st.shadow};"
-         onmouseover="if(!'${status}'.includes('offline')){this.style.borderColor='#10B981';this.style.boxShadow='0 4px 24px rgba(16,185,129,0.10)';this.style.opacity='1';this.style.filter='none'}"
+    <div style="background:${st.bg};border:1px solid ${st.border};border-radius:${Math.max(4, Math.round(6 * s))}px;padding:${pad};cursor:${off ? 'default' : 'pointer'};width:${v.width}px;height:${v.height}px;flex-shrink:0;transition:all 0.25s;overflow:hidden;box-sizing:border-box;display:flex;flex-direction:column;position:relative;opacity:${st.opacity};filter:${st.filter};box-shadow:${st.shadow};${criticalAnim}"
+         onmouseover="if('${status}'!=='offline'){this.style.borderColor='#10B981';this.style.boxShadow='0 4px 24px rgba(16,185,129,0.10)';this.style.opacity='1';this.style.filter='none'}"
          onmouseout="this.style.borderColor='${st.border}';this.style.boxShadow='${st.shadow}';this.style.opacity='${st.opacity}';this.style.filter='${st.filter}'"
          onclick="if(!window._wasDragged)window.location.hash='/server/${server.id}'">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${nameMb};">
+      ${offlineOverlay}
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;${off ? 'opacity:0.3;' : ''}">
         <div style="overflow:hidden;flex:1;">
           <div style="font-size:${projFs};font-weight:700;color:${st.proj};text-transform:uppercase;letter-spacing:0.8px;">${server.project || ''}</div>
           <div style="font-size:${nameFs};font-weight:700;font-family:'Space Grotesk',var(--font-brand),sans-serif;letter-spacing:-0.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#E8ECF1;margin-top:2px;">${server.name}</div>
         </div>
-        <div style="width:${Math.max(7, Math.round(9 * s))}px;height:${Math.max(7, Math.round(9 * s))}px;border-radius:50%;flex-shrink:0;margin-top:4px;background:${st.led};${status !== 'offline' ? 'animation:pulse 2s infinite;' : ''}"></div>
+        <div style="width:${ledSize};height:${ledSize};border-radius:50%;flex-shrink:0;margin-top:4px;background:${st.led};${status !== 'offline' ? 'animation:pulse 2s infinite;' : ''}"></div>
       </div>
-      <div style="flex:1;display:flex;flex-direction:column;justify-content:center;">
-        ${metricRow('CPU', cpu, 'cpu', server.id + '_cpu')}
-        ${metricRow('MEM', mem, 'memory', server.id + '_memory')}
-        ${metricRow('DISK', disk, 'disk', server.id + '_disk')}
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:center;${off ? 'opacity:0.15;' : ''}">
+        ${metricBlock('CPU', cpu, 'cpu', server.id + '_cpu')}
+        ${metricBlock('MEM', mem, 'memory', server.id + '_memory')}
+        ${metricBlock('DISK', disk, 'disk', server.id + '_disk')}
       </div>
-      ${offlineLabel}
     </div>`;
 }
 
