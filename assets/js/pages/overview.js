@@ -22,7 +22,7 @@ let slideMaxScroll = 0;
 let slideDirection = 1;
 let slidePauseUntil = 0;
 
-const GAP = 8;
+const GAP = 5;
 let cardStyle = {};
 let notificationPermission = false;
 let alertEnabled = true;
@@ -102,7 +102,7 @@ function calcCardStyle(rows, availH) {
   const w = Math.floor(h * 1.9);
   const s = h / 160;
   const usedH = rows * h;
-  const extraGap = rows > 1 ? Math.min(Math.floor((availH - usedH) / (rows - 1)), 30) : 0;
+  const extraGap = rows > 1 ? Math.min(Math.floor((availH - usedH) / (rows - 1)), 10) : 0;
   const dynGap = GAP + extraGap;
 
   return {
@@ -116,7 +116,7 @@ function calcCardStyle(rows, availH) {
     valW: `${Math.max(26, Math.round(34 * s))}px`,
     nameMb: `${Math.max(3, Math.round(6 * s))}px`,
     metricGap: `${Math.max(2, Math.round(4 * s))}px`,
-    radius: `${Math.max(4, Math.round(6 * s))}px`,
+    radius: `${3}px`,
     projSize: `${clamp(0.45, 0.55 * s, 0.7).toFixed(2)}rem`,
   };
 }
@@ -492,8 +492,8 @@ function renderNodeCard(server) {
   const valFs = `${clamp(0.58, 0.72 * s, 0.85).toFixed(2)}rem`;
   const lblW = `${Math.max(28, Math.round(36 * s))}px`;
   const valW = `${Math.max(30, Math.round(38 * s))}px`;
-  const rowGap = `${Math.max(6, Math.round(10 * s))}px`;
-  const pad = `${Math.max(10, Math.round(14 * s))}px`;
+  const rowGap = `${Math.max(4, Math.round(7 * s))}px`;
+  const pad = `${Math.max(8, Math.round(12 * s))}px`;
   const nameFs = `${clamp(0.8, 1.05 * s, 1.2).toFixed(2)}rem`;
   const projFs = `${clamp(0.5, 0.58 * s, 0.68).toFixed(2)}rem`;
   const ledSize = `${Math.max(8, Math.round(10 * s))}px`;
@@ -542,7 +542,7 @@ function renderNodeCard(server) {
     </div>` : '';
 
   return `
-    <div style="background:${st.bg};border:1px solid ${st.border};border-radius:${Math.max(4, Math.round(6 * s))}px;padding:${pad};cursor:${off ? 'default' : 'pointer'};width:${v.width}px;height:${v.height}px;flex-shrink:0;transition:all 0.25s;overflow:hidden;box-sizing:border-box;display:flex;flex-direction:column;position:relative;opacity:${st.opacity};filter:${st.filter};box-shadow:${st.shadow};${critAnim}"
+    <div style="background:${st.bg};border:1px solid ${st.border};border-radius:${3}px;padding:${pad};cursor:${off ? 'default' : 'pointer'};width:${v.width}px;height:${v.height}px;flex-shrink:0;transition:all 0.25s;overflow:hidden;box-sizing:border-box;display:flex;flex-direction:column;position:relative;opacity:${st.opacity};filter:${st.filter};box-shadow:${st.shadow};${critAnim}"
          onmouseover="if('${status}'!=='offline'){this.style.borderColor='#10B981';this.style.boxShadow='0 4px 24px rgba(16,185,129,0.10)';this.style.opacity='1';this.style.filter='none'}"
          onmouseout="this.style.borderColor='${st.border}';this.style.boxShadow='${st.shadow}';this.style.opacity='${st.opacity}';this.style.filter='${st.filter}'"
          onclick="if(!window._wasDragged)window.location.hash='/server/${server.id}'">

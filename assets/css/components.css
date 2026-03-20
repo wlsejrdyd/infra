@@ -89,7 +89,7 @@
 .badge {
   display: inline-block;
   padding: 3px 8px;
-  border-radius: 6px;
+  border-radius: 3px;
   font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -201,7 +201,7 @@
 .modal {
   background: var(--bg-card);
   border: 1px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: 3px;
   padding: 1.5rem;
   max-width: 600px;
   width: 90%;
@@ -576,7 +576,7 @@ tr:hover td {
   display: flex;
   gap: 2px;
   background: var(--bg-primary);
-  border-radius: 6px;
+  border-radius: 3px;
   padding: 2px;
 }
 

@@ -210,7 +210,7 @@ body {
 /* External Links */
 .ext-link {
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: 3px;
   font-size: 0.65rem;
   font-weight: 600;
   text-decoration: none;
@@ -419,7 +419,7 @@ body {
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 3px;
   padding: 1.25rem;
   transition: all 0.2s;
 }
@@ -472,7 +472,7 @@ body {
 .server-header {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 3px;
   padding: 1.25rem;
   margin-bottom: 1rem;
   display: flex;
@@ -520,7 +520,7 @@ body {
 .server-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 3px;
   padding: 1.25rem;
   transition: all 0.2s;
   cursor: pointer;
