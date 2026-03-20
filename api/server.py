@@ -334,7 +334,8 @@ def handle_alert():
             label_map = {'warning': 'Warning', 'critical': 'Critical', 'offline': 'Offline'}
             emoji = emoji_map[status]
             label = label_map[status]
-            text = f"{emoji} *[{label}] {server_name}* (`{server_id}`)\n상태가 {label}(으)로 변경되었습니다."
+            mention = '<!channel> ' if status in ('critical', 'offline') else ''
+            text = f"{mention}{emoji} *[{label}] {server_name}* (`{server_id}`)\n상태가 {label}(으)로 변경되었습니다."
 
             # 리소스 상세정보 추가
             metrics = body.get('metrics', {})
