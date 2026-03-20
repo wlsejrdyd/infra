@@ -202,7 +202,7 @@ EOF</code>
       <div style="font-size:0.78rem;color:#6B7A90;margin-bottom:0.75rem;">Node Exporter 포트(9100)에 접근 불가한 서버에서 사용. 대상 서버에 SSH 접속 후 아래 명령어를 순서대로 실행.</div>
 
       <div style="font-size:0.72rem;font-weight:600;color:#10B981;margin-bottom:0.3rem;">Step 1. 에이전트 다운로드 + 설정 생성 (원커맨드)</div>
-      <code id="pushStep1" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">mkdir -p ~/sim_mon_agent && cd ~/sim_mon_agent && curl -sO https://raw.githubusercontent.com/wlsejrdyd/infra/main/agent/push_agent.py && cat > agent_config.json << 'CONF'
+      <code id="pushStep1" style="display:block;padding:8px;background:#0B0E14;border-radius:3px;font-size:0.72rem;margin-bottom:0.5rem;white-space:pre-wrap;font-family:monospace;">mkdir -p ~/sim_mon_agent && cd ~/sim_mon_agent && curl -skO https://infra.deok.kr/agent/push_agent.py && cat > agent_config.json << 'CONF'
 {
   "server_url": "https://infra.deok.kr/api/push/metrics",
   "server_id": "여기에_서버ID_입력",
