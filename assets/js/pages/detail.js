@@ -19,11 +19,12 @@ let refreshInterval;
 let cpuChart;
 let memoryChart;
 let modalEl = null;
+let _serversData = null;
 
 export async function renderDetail(params) {
   const serverId = params.id;
-  const serversData = await fetchServersData();
-  const server = serversData.servers.find(s => s.id === serverId);
+  _serversData = await fetchServersData();
+  const server = _serversData.servers.find(s => s.id === serverId);
 
   if (!server) {
     window.location.hash = '/overview';
@@ -284,7 +285,7 @@ async function updateServerData(server) {
   if (isPush) {
     const k8sData = metrics.k8s;
     if (k8sData && k8sData.pods && k8sData.pods.length > 0 && procContainer) {
-      renderK8sPods(k8sData, procContainer, titleEl, iconEl, server.thresholds || serversData.defaultThresholds);
+      renderK8sPods(k8sData, procContainer, titleEl, iconEl, server.thresholds || _serversData.defaultThresholds);
     } else {
       const pushProcs = metrics.processes || [];
       if (procContainer && pushProcs.length > 0) {
@@ -306,7 +307,7 @@ async function updateServerData(server) {
     } else if (procContainer) {
       const k8sRes = await fetchKubernetesPodResources(server.instance);
       if (k8sRes.pods.length > 0) {
-        renderK8sPods(k8sRes, procContainer, titleEl, iconEl, server.thresholds || serversData.defaultThresholds);
+        renderK8sPods(k8sRes, procContainer, titleEl, iconEl, server.thresholds || _serversData.defaultThresholds);
       } else {
         if (titleEl) titleEl.textContent = 'SYSTEM INFO';
         if (iconEl) iconEl.textContent = '🖥️';
