@@ -127,13 +127,23 @@ function calcCardStyle(rows, availH) {
 export async function renderOverview() {
   const app = document.getElementById('app');
 
-  // 서버 데이터 + 알림 설정 로드
-  const [sData, alertConfig] = await Promise.all([
+  // 서버 데이터 + 알림 설정 + 이전 알림 상태 로드
+  const [sData, alertConfig, alertState] = await Promise.all([
     fetchServersData(),
-    fetch('/api/alert/config').then(r => r.json()).catch(() => ({ enabled: true }))
+    fetch('/api/alert/config').then(r => r.json()).catch(() => ({ enabled: true })),
+    fetch('/api/alert/state').then(r => r.json()).catch(() => ({}))
   ]);
   serversData = sData;
   alertEnabled = alertConfig.enabled !== false;
+
+  // alert_state에서 이전 상태 복원 (브라우저 새로고침 시 복구 감지용)
+  if (Object.keys(previousStatusMap).length === 0 && Object.keys(alertState).length > 0) {
+    for (const [id, info] of Object.entries(alertState)) {
+      if (info.status && !id.startsWith('ssl:')) {
+        previousStatusMap[id] = info.status;
+      }
+    }
+  }
 
   // 프로젝트 목록 추출
   const projects = ['all', ...new Set(serversData.servers.map(s => s.project))];
