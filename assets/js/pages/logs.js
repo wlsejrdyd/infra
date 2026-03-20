@@ -136,6 +136,7 @@ export async function renderLogs() {
   document.querySelectorAll('.log-level-cb').forEach(cb => {
     cb.addEventListener('change', () => {
       currentLevel[cb.dataset.level] = cb.checked;
+      fetchLogs();
     });
   });
 
