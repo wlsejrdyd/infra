@@ -284,7 +284,7 @@ async function updateServerData(server) {
   if (isPush) {
     const k8sData = metrics.k8s;
     if (k8sData && k8sData.pods && k8sData.pods.length > 0 && procContainer) {
-      renderK8sPods(k8sData, procContainer, titleEl, iconEl);
+      renderK8sPods(k8sData, procContainer, titleEl, iconEl, server.thresholds || serversData.defaultThresholds);
     } else {
       const pushProcs = metrics.processes || [];
       if (procContainer && pushProcs.length > 0) {
@@ -306,7 +306,7 @@ async function updateServerData(server) {
     } else if (procContainer) {
       const k8sRes = await fetchKubernetesPodResources(server.instance);
       if (k8sRes.pods.length > 0) {
-        renderK8sPods(k8sRes, procContainer, titleEl, iconEl);
+        renderK8sPods(k8sRes, procContainer, titleEl, iconEl, server.thresholds || serversData.defaultThresholds);
       } else {
         if (titleEl) titleEl.textContent = 'SYSTEM INFO';
         if (iconEl) iconEl.textContent = '🖥️';
@@ -340,7 +340,7 @@ function renderProcessList(processes, container) {
   }).join('');
 }
 
-function renderK8sPods(k8sData, container, titleEl, iconEl) {
+function renderK8sPods(k8sData, container, titleEl, iconEl, thresholds) {
   if (titleEl) titleEl.textContent = `KUBERNETES — ${k8sData.nodeName || 'NODE'}`;
   if (iconEl) iconEl.textContent = '☸️';
   const fmtCpu = (c) => c >= 1 ? `${c.toFixed(1)}c` : `${Math.round(c * 1000)}m`;
@@ -350,11 +350,18 @@ function renderK8sPods(k8sData, container, titleEl, iconEl) {
   const cpuReq = active.reduce((s, p) => s + p.cpuReq, 0);
   const memReq = active.reduce((s, p) => s + p.memReq, 0);
 
+  const cpuReqTh = (thresholds || {}).cpuRequest || { warning: 80, critical: 90 };
+  const memReqTh = (thresholds || {}).memoryRequest || { warning: 80, critical: 90 };
+  const cpuPct = alloc && alloc.cpu > 0 ? cpuReq / alloc.cpu * 100 : 0;
+  const memPct = alloc && alloc.memory > 0 ? memReq / alloc.memory * 100 : 0;
+  const cpuPctColor = cpuPct >= cpuReqTh.critical ? '#EF4444' : cpuPct >= cpuReqTh.warning ? '#F59E0B' : '#10B981';
+  const memPctColor = memPct >= memReqTh.critical ? '#EF4444' : memPct >= memReqTh.warning ? '#F59E0B' : '#10B981';
+
   let html = `<div style="display:flex;gap:0.75rem;padding:0 0 0.4rem;border-bottom:1px solid #1E2736;margin-bottom:0.3rem;flex-wrap:wrap;font-size:0.7rem;">
     <span><span style="color:#10B981;font-weight:700;">${k8sData.summary.running}</span> <span style="color:#6B7A90;">Running</span></span>
     <span><span style="color:#F59E0B;font-weight:700;">${k8sData.summary.pending}</span> <span style="color:#6B7A90;">Pending</span></span>
     <span><span style="color:#EF4444;font-weight:700;">${k8sData.summary.failed}</span> <span style="color:#6B7A90;">Failed</span></span>
-    ${alloc ? `<span style="margin-left:auto;color:#6B7A90;">CPU ${fmtCpu(cpuReq)}/${fmtCpu(alloc.cpu)} <span style="color:${alloc.cpu > 0 && cpuReq/alloc.cpu >= 0.9 ? '#EF4444' : alloc.cpu > 0 && cpuReq/alloc.cpu >= 0.8 ? '#F59E0B' : '#10B981'};font-weight:700;">(${alloc.cpu > 0 ? (cpuReq/alloc.cpu*100).toFixed(1) : 0}%)</span> · MEM ${formatBytes(memReq)}/${formatBytes(alloc.memory)} <span style="color:${alloc.memory > 0 && memReq/alloc.memory >= 0.9 ? '#EF4444' : alloc.memory > 0 && memReq/alloc.memory >= 0.8 ? '#F59E0B' : '#10B981'};font-weight:700;">(${alloc.memory > 0 ? (memReq/alloc.memory*100).toFixed(1) : 0}%)</span></span>` : ''}
+    ${alloc ? `<span style="margin-left:auto;color:#6B7A90;">CPU ${fmtCpu(cpuReq)}/${fmtCpu(alloc.cpu)} <span style="color:${cpuPctColor};font-weight:700;">(${cpuPct.toFixed(1)}%)</span> · MEM ${formatBytes(memReq)}/${formatBytes(alloc.memory)} <span style="color:${memPctColor};font-weight:700;">(${memPct.toFixed(1)}%)</span></span>` : ''}
   </div>`;
 
   k8sData.pods.forEach((pod, i) => {
