@@ -56,6 +56,30 @@ LOKI_URL = os.environ.get('LOKI_URL', 'http://localhost:3100')
 LOKI_ORG_ID = os.environ.get('LOKI_ORG_ID', 'fake')
 LOKI_HEADERS = lambda: {'X-Scope-OrgID': LOKI_ORG_ID}
 
+# Twilio 전화 알림
+TWILIO_SID = os.environ.get('TWILIO_SID', '')
+TWILIO_TOKEN = os.environ.get('TWILIO_TOKEN', '')
+TWILIO_FROM = os.environ.get('TWILIO_FROM', '')
+ALERT_PHONE = os.environ.get('ALERT_PHONE', '')
+
+def _twilio_call(server_name, status):
+    """Critical/Offline 시 전화 알림 (Twilio)"""
+    if not all([TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM, ALERT_PHONE]):
+        return
+    try:
+        from twilio.rest import Client
+        client = Client(TWILIO_SID, TWILIO_TOKEN)
+        twiml = (
+            f'<Response>'
+            f'<Say language="ko-KR">경고. {server_name} 서버가 {status} 상태입니다. 즉시 확인하세요.</Say>'
+            f'<Pause length="2"/>'
+            f'<Say language="ko-KR">반복합니다. {server_name} 서버 {status}. 즉시 확인 바랍니다.</Say>'
+            f'</Response>'
+        )
+        client.calls.create(twiml=twiml, to=ALERT_PHONE, from_=TWILIO_FROM)
+    except Exception as e:
+        print(f'[Twilio] Call failed: {e}')
+
 # Prometheus 설정
 PROMETHEUS_YML = os.environ.get('PROMETHEUS_YML', '/etc/prometheus/prometheus.yml')
 PROMETHEUS_RELOAD_URL = os.environ.get('PROMETHEUS_RELOAD_URL', 'http://localhost:9090/-/reload')
@@ -359,6 +383,11 @@ def handle_alert():
                     text += f"\n☸️ K8s {' | '.join(k8s_parts)}"
 
             ts = _slack_post_message(SLACK_CHANNEL, text)
+
+            # Critical/Offline 시 전화 알림
+            if status in ('critical', 'offline'):
+                threading.Thread(target=_twilio_call, args=(server_name, label), daemon=True).start()
+
             if ts:
                 state[server_id] = {
                     'ts': ts,
