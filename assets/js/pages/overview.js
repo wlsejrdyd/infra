@@ -1,5 +1,5 @@
 // assets/js/pages/overview.js
-import { fetchServersData, fetchServerMetricsUnified, fetchSslStatus, fetchKubernetesPodResources } from '/assets/js/api.js';
+import { fetchServersData, fetchServerMetricsUnified, fetchSslStatus, fetchKubernetesPodResources, fetchSparklineHistory } from '/assets/js/api.js';
 import { updateTopbarBadges, updateLastUpdated } from '/assets/js/app.js';
 
 let serversData = { servers: [], defaultThresholds: {} };
@@ -9,7 +9,8 @@ let currentSearchQuery = '';
 let currentRows = 3;
 let updateInterval = null;
 let previousStatusMap = {};
-const sparklineHistory = {}; // key: serverId_cpu, serverId_mem, serverId_disk → [val, ...] (최근 20개)
+const sparklineHistory = {}; // key: serverId_cpu, serverId_mem, serverId_disk → [val, ...] (최근 40개)
+let sparklineInitialized = false;
 
 // 슬라이딩 & 드래그
 let slideAnim = null;
@@ -171,9 +172,23 @@ export async function renderOverview() {
           <div class="overview-subtitle" id="overviewSubtitle">${serversData.servers.length}개 서버 · ${projects.length - 1}개 프로젝트 실시간 모니터링</div>
         </div>
         <div class="overview-header-actions">
+          <button class="help-btn" id="helpBtn" title="수집 정보">?</button>
           <select class="filter-select" id="projectFilter">
             ${projects.map(p => `<option value="${p}" ${p === currentFilter ? 'selected' : ''}>${p === 'all' ? '전체 프로젝트' : p}</option>`).join('')}
           </select>
+        </div>
+        <div class="help-tooltip" id="helpTooltip" style="display:none;">
+          <div class="help-tooltip-content">
+            <b>수집 주기</b>
+            <table>
+              <tr><td>메트릭 갱신</td><td>10초</td></tr>
+              <tr><td>Sparkline</td><td>최근 10분 (15초 간격, 40포인트)</td></tr>
+              <tr><td>상세 차트</td><td>최근 1시간 (5분 간격)</td></tr>
+              <tr><td>SSL 체크</td><td>60초</td></tr>
+              <tr><td>Prometheus scrape</td><td>10초 (Pull 모드)</td></tr>
+              <tr><td>Push Agent</td><td>30초 (Push 모드)</td></tr>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -218,6 +233,33 @@ export async function renderOverview() {
     window._overviewResizeTimer = setTimeout(renderServerGrid, 200);
   };
   window.addEventListener('resize', window._overviewResizeHandler);
+
+  // 도움말 버튼 토글
+  document.getElementById('helpBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const tt = document.getElementById('helpTooltip');
+    tt.style.display = tt.style.display === 'none' ? 'block' : 'none';
+  });
+  document.addEventListener('click', () => {
+    const tt = document.getElementById('helpTooltip');
+    if (tt) tt.style.display = 'none';
+  });
+
+  // Sparkline 초기 데이터 로드 (최근 10분, Pull 서버만)
+  if (!sparklineInitialized) {
+    sparklineInitialized = true;
+    Promise.all(serversData.servers.filter(s => s.mode !== 'push').map(async (server) => {
+      try {
+        const hist = await fetchSparklineHistory(server.instance);
+        ['cpu', 'memory', 'disk'].forEach(type => {
+          const key = server.id + '_' + type;
+          if (hist[type] && hist[type].length > 0) {
+            sparklineHistory[key] = hist[type].slice(-40);
+          }
+        });
+      } catch (e) { /* skip */ }
+    })).then(() => drawAllSparklines());
+  }
 
   await updateServerGrid();
   updateSslStatusBar();
@@ -302,14 +344,14 @@ async function updateServerGrid() {
 
     server._metrics = metrics;
 
-    // sparkline 히스토리 누적 (CPU/MEM/DISK, 최근 20개)
+    // sparkline 히스토리 누적 (CPU/MEM/DISK, 최근 40개)
     ['cpu', 'memory', 'disk'].forEach(type => {
       const key = server.id + '_' + type;
       if (!sparklineHistory[key]) sparklineHistory[key] = [];
       const val = type === 'memory' ? metrics.memory : metrics[type];
       if (val != null) {
         sparklineHistory[key].push(val);
-        if (sparklineHistory[key].length > 20) sparklineHistory[key].shift();
+        if (sparklineHistory[key].length > 40) sparklineHistory[key].shift();
       }
     });
 

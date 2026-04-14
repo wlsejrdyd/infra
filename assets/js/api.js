@@ -312,6 +312,38 @@ export async function fetchCpuHistory(instance, range = '1h') {
 }
 
 /**
+ * Sparkline용 최근 10분 히스토리 (CPU/MEM/DISK, 15초 간격 → 40포인트)
+ */
+export async function fetchSparklineHistory(instance) {
+  const end = Math.floor(Date.now() / 1000);
+  const start = end - 600; // 10분
+  const step = 15; // 15초 간격
+  const result = { cpu: [], memory: [], disk: [] };
+
+  try {
+    const queries = {
+      cpu: `100 - (avg(irate(node_cpu_seconds_total{instance="${instance}",mode="idle"}[1m])) * 100)`,
+      memory: `(1 - node_memory_MemAvailable_bytes{instance="${instance}"} / node_memory_MemTotal_bytes{instance="${instance}"}) * 100`,
+      disk: `100 - ((node_filesystem_avail_bytes{instance="${instance}",mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{instance="${instance}",mountpoint="/",fstype!="tmpfs"}) * 100)`
+    };
+
+    await Promise.all(Object.entries(queries).map(async ([type, query]) => {
+      const res = await fetch(
+        `${CONFIG.prometheusUrl}/api/v1/query_range?query=${encodeURIComponent(query)}&start=${start}&end=${end}&step=${step}`
+      );
+      const data = await res.json();
+      if (data.status === 'success' && data.data.result.length > 0) {
+        result[type] = data.data.result[0].values.map(v => parseFloat(v[1]));
+      }
+    }));
+  } catch (e) {
+    console.error('Failed to fetch sparkline history:', e);
+  }
+
+  return result;
+}
+
+/**
  * 서버 목록 조회 (백엔드 API)
  */
 export async function fetchServersData() {

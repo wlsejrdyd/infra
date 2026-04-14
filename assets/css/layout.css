@@ -285,6 +285,71 @@ body {
   display: flex;
   gap: 8px;
   align-items: center;
+  position: relative;
+}
+
+.help-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.help-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.help-tooltip {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  z-index: 200;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 18px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  min-width: 280px;
+}
+
+.help-tooltip-content b {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.help-tooltip-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.help-tooltip-content td {
+  padding: 4px 0;
+  color: var(--text-muted);
+}
+
+.help-tooltip-content td:first-child {
+  color: var(--text);
+  font-weight: 500;
+  padding-right: 16px;
+}
+
+.help-tooltip-content td:last-child {
+  text-align: right;
+  color: var(--accent);
+  font-family: 'SFMono-Regular', Consolas, monospace;
 }
 
 .overview-content {
