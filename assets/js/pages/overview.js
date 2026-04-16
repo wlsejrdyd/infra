@@ -9,8 +9,8 @@ let currentSearchQuery = '';
 let currentRows = 3;
 let updateInterval = null;
 let previousStatusMap = {};
-const offlineCountMap = {}; // 연속 offline 카운트 (3회 이상일 때만 실제 offline 판정)
-const OFFLINE_THRESHOLD = 3; // 3회 연속 (= 30초) offline이어야 실제 offline
+const offlineCountMap = {}; // 연속 offline 카운트 (5회 이상일 때만 실제 offline 판정)
+const OFFLINE_THRESHOLD = 5; // 5회 연속 (= 50초) offline이어야 실제 offline
 const sparklineHistory = {}; // key: serverId_cpu, serverId_mem, serverId_disk → [val, ...] (최근 40개)
 let sparklineInitialized = false;
 
@@ -191,7 +191,7 @@ export async function renderOverview() {
             </table>
             <b style="margin-top:8px;display:block;">상태 판정</b>
             <table>
-              <tr><td>Offline (Pull)</td><td>3회 연속 실패 시 (30초)</td></tr>
+              <tr><td>Offline (Pull)</td><td>5회 연속 실패 시 (50초)</td></tr>
               <tr><td>Offline (Push)</td><td>120초 갱신 없음</td></tr>
               <tr><td>Warning</td><td>CPU/MEM ≥ 70% 또는 DISK ≥ 80%</td></tr>
               <tr><td>Critical</td><td>CPU/MEM ≥ 80% 또는 DISK ≥ 90%</td></tr>
