@@ -672,13 +672,13 @@ def get_push_metrics(server_id):
             'uptime': None, 'status': 'offline',
         }), 200
 
-    # staleness 체크: 120초 이상 갱신 없으면 offline (에이전트 30초 × 4회 여유)
+    # staleness 체크: 300초(5분) 이상 갱신 없으면 offline (에이전트 30초 × 10회 여유)
     last_ts = entry.get('lastUpdated', '')
     if last_ts:
         try:
             last_dt = datetime.fromisoformat(last_ts.replace('Z', '+00:00'))
             now_dt = datetime.now(timezone.utc)
-            if (now_dt - last_dt).total_seconds() > 120:
+            if (now_dt - last_dt).total_seconds() > 300:
                 entry['status'] = 'offline'
         except (ValueError, TypeError):
             pass

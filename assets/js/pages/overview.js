@@ -192,7 +192,7 @@ export async function renderOverview() {
             <b style="margin-top:8px;display:block;">상태 판정</b>
             <table>
               <tr><td>Offline (Pull)</td><td>5회 연속 실패 시 (50초)</td></tr>
-              <tr><td>Offline (Push)</td><td>120초 갱신 없음</td></tr>
+              <tr><td>Offline (Push)</td><td>5분 갱신 없음</td></tr>
               <tr><td>Warning</td><td>CPU/MEM ≥ 70% 또는 DISK ≥ 80%</td></tr>
               <tr><td>Critical</td><td>CPU/MEM ≥ 80% 또는 DISK ≥ 90%</td></tr>
               <tr><td>K8s Request</td><td>CPU/MEM Request ≥ 80%(W) / 90%(C)</td></tr>
