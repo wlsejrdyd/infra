@@ -813,6 +813,74 @@ def deploy_status():
         return jsonify({'error': str(e)}), 500
 
 
+# ──────────────────────────────────
+# ICMP Ping API
+# ──────────────────────────────────
+
+@app.route('/api/ping', methods=['POST'])
+def ping_hosts():
+    """IP 목록 또는 CIDR 대역을 받아 ICMP ping 결과 반환"""
+    import subprocess
+    import ipaddress
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    targets = data.get('targets', [])
+    cidr = data.get('cidr', '')
+    timeout = min(int(data.get('timeout', 1)), 3)  # 최대 3초
+
+    # CIDR 대역 → IP 목록 확장 (최대 /20 = 4096개)
+    if cidr:
+        try:
+            network = ipaddress.ip_network(cidr, strict=False)
+            if network.num_addresses > 4096:
+                return jsonify({'error': 'CIDR too large (max /20)'}), 400
+            targets = [str(ip) for ip in network.hosts()]
+        except ValueError as e:
+            return jsonify({'error': f'Invalid CIDR: {e}'}), 400
+
+    if not targets:
+        return jsonify({'error': 'No targets provided'}), 400
+    if len(targets) > 4096:
+        return jsonify({'error': 'Too many targets (max 4096)'}), 400
+
+    results = []
+
+    def ping_one(ip):
+        try:
+            # fping 사용 (없으면 ping fallback)
+            r = subprocess.run(
+                ['ping', '-c', '1', '-W', str(timeout), str(ip)],
+                capture_output=True, text=True, timeout=timeout + 2
+            )
+            alive = r.returncode == 0
+            # RTT 추출
+            rtt = None
+            if alive:
+                import re as _re
+                m = _re.search(r'time[=<]([\d.]+)', r.stdout)
+                if m:
+                    rtt = float(m.group(1))
+            return {'ip': str(ip), 'alive': alive, 'rtt': rtt}
+        except (subprocess.TimeoutExpired, Exception):
+            return {'ip': str(ip), 'alive': False, 'rtt': None}
+
+    # 병렬 ping (최대 64 스레드)
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=min(64, len(targets))) as pool:
+        results = list(pool.map(ping_one, targets))
+
+    alive_count = sum(1 for r in results if r['alive'])
+    return jsonify({
+        'total': len(results),
+        'alive': alive_count,
+        'dead': len(results) - alive_count,
+        'results': results
+    }), 200
+
+
 if __name__ == '__main__':
     # 개발 환경: 디버그 모드
     # 운영 환경: gunicorn 사용 권장
