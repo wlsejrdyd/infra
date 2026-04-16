@@ -9,6 +9,8 @@ let currentSearchQuery = '';
 let currentRows = 3;
 let updateInterval = null;
 let previousStatusMap = {};
+const offlineCountMap = {}; // 연속 offline 카운트 (3회 이상일 때만 실제 offline 판정)
+const OFFLINE_THRESHOLD = 3; // 3회 연속 (= 30초) offline이어야 실제 offline
 const sparklineHistory = {}; // key: serverId_cpu, serverId_mem, serverId_disk → [val, ...] (최근 40개)
 let sparklineInitialized = false;
 
@@ -185,8 +187,14 @@ export async function renderOverview() {
               <tr><td>Sparkline</td><td>최근 10분 (15초 간격, 40포인트)</td></tr>
               <tr><td>상세 차트</td><td>최근 1시간 (5분 간격)</td></tr>
               <tr><td>SSL 체크</td><td>60초</td></tr>
-              <tr><td>Prometheus scrape</td><td>10초 (Pull 모드)</td></tr>
               <tr><td>Push Agent</td><td>30초 (Push 모드)</td></tr>
+            </table>
+            <b style="margin-top:8px;display:block;">상태 판정</b>
+            <table>
+              <tr><td>Offline</td><td>3회 연속 실패 시 (30초)</td></tr>
+              <tr><td>Warning</td><td>CPU/MEM ≥ 70% 또는 DISK ≥ 80%</td></tr>
+              <tr><td>Critical</td><td>CPU/MEM ≥ 80% 또는 DISK ≥ 90%</td></tr>
+              <tr><td>K8s Request</td><td>CPU/MEM Request ≥ 80%(W) / 90%(C)</td></tr>
             </table>
           </div>
         </div>
@@ -340,6 +348,17 @@ async function updateServerGrid() {
       const allocMem = k8sData.nodeAllocatable.memory || 0;
       if (allocCpu > 0) metrics.cpuRequestPct = (totalCpuReq / allocCpu) * 100;
       if (allocMem > 0) metrics.memRequestPct = (totalMemReq / allocMem) * 100;
+    }
+
+    // 연속 offline 카운트 — 일시적 Prometheus 지연으로 인한 false offline 방지
+    if (metrics.status === 'offline') {
+      offlineCountMap[server.id] = (offlineCountMap[server.id] || 0) + 1;
+      if (offlineCountMap[server.id] < OFFLINE_THRESHOLD) {
+        // 아직 임계치 미달 → 마지막 정상 상태 유지
+        metrics.status = 'online';
+      }
+    } else {
+      offlineCountMap[server.id] = 0;
     }
 
     server._metrics = metrics;
