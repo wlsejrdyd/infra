@@ -341,9 +341,19 @@ def handle_alert():
         state = _load_alert_state()
 
         if status in ('warning', 'critical', 'offline'):
-            # 같은 상태면 중복 발송 안 함. 상태가 바뀌면 새 알림 전송.
+            # 같은 상태면 중복 발송 안 함
             if server_id in state and state[server_id].get('status') == status:
                 return jsonify({'skipped': True, 'message': 'Same status, already sent'}), 200
+
+            # 5분 이내 동일 서버 알림 차단 (여러 브라우저 동시 발송 방지)
+            last_alerted = state.get(server_id, {}).get('lastAlerted', '')
+            if last_alerted:
+                try:
+                    last_dt = datetime.fromisoformat(last_alerted.replace('Z', '+00:00'))
+                    if (datetime.now(timezone.utc) - last_dt).total_seconds() < 300:
+                        return jsonify({'skipped': True, 'message': 'Cooldown (5min)'}), 200
+                except (ValueError, TypeError):
+                    pass
 
             # 상태 변경 시 이전 알림 스레드에 변경 알림 + 새 메시지 발송
             prev_entry = state.get(server_id)
@@ -394,6 +404,7 @@ def handle_alert():
                     'status': status,
                     'serverName': server_name,
                     'timestamp': datetime.now(timezone.utc).isoformat(),
+                    'lastAlerted': datetime.now(timezone.utc).isoformat(),
                     'metrics': metrics or {},
                 }
                 _save_alert_state(state)
