@@ -568,14 +568,23 @@ def check_ssl_all():
 
 def _load_push_metrics():
     if os.path.exists(PUSH_METRICS_FILE):
-        with open(PUSH_METRICS_FILE, 'r') as f:
-            return json.load(f)
+        for attempt in range(3):
+            try:
+                with open(PUSH_METRICS_FILE, 'r') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, ValueError):
+                import time
+                time.sleep(0.1)  # write 완료 대기 후 재시도
+        return {}
     return {}
 
 
 def _save_push_metrics(data):
-    with open(PUSH_METRICS_FILE, 'w') as f:
+    # atomic write — 임시파일에 쓰고 rename (read 중 깨진 JSON 방지)
+    tmp_file = PUSH_METRICS_FILE + '.tmp'
+    with open(tmp_file, 'w') as f:
         json.dump(data, f, indent=2)
+    os.replace(tmp_file, PUSH_METRICS_FILE)
 
 
 @app.route('/api/push/metrics', methods=['POST'])
